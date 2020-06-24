@@ -1,3 +1,10 @@
+# Truck app
+
+This Github repository hosts the TRUCK app.
+The link for the TRUCK app is:
+RShiny: [![Binder](http://mybinder.org/badge_logo.svg)](http://mybinder.org/v2/gh/ahcyip/binder/master?urlpath=shiny/truck-app/)
+
+
 # Specifying an R environment with a runtime.txt file
 
 Jupyter+R: [![Binder](http://mybinder.org/badge_logo.svg)](http://mybinder.org/v2/gh/binder-examples/r/master?filepath=index.ipynb)
