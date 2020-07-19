@@ -130,7 +130,8 @@ stop_info_list[[3]] <- links_states_3groups[[3]] %>%
   map_depth(1, extract_stop_pg_links_from_state_pg) %>% map_depth(2, safely_extract_stopdata)
 
 
-# not sure if 44124 was a problem (unused connection closed)
+# not sure if 44124, 198722, 48681 were problems
+# (unused connection closed)
 
 
 stop_info_df <- stop_info_list %>%
