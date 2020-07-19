@@ -132,6 +132,7 @@ stop_info_list[[3]] <- links_states_3groups[[3]] %>%
 
 # not sure if 44124, 198722, 48681 were problems
 # (unused connection closed)
+# no error messages detected... known 404 problems...
 
 
 stop_info_df <- stop_info_list %>%
@@ -166,9 +167,7 @@ stop_info_df %>% saveRDS(here::here("stop_info.RDS"))
 # read/mutate allstays data (start here) ####
 stop_info_df <- readRDS(here::here("stop_info.RDS"))
 
-
 View(stop_info_df)
-
 
 
 # __ truck parking spaces / Parking Spaces as indicator of size
@@ -292,7 +291,7 @@ states_map %>%
 #___________________________________________________________________
 # mapping stations onto google satellite images ####
 
-register_google("AIzaSyB-mx21RVnjAMXrRc0xHTQg4TuMZHAjxFI", write = TRUE)
+register_google(Sys.getenv("google_cloud_apikey"))
 
 # close_up <- ggmap(nevada)
 # x_lim <- close_up$data[c(1, 4), 1] * c(1, .9998)

@@ -204,33 +204,37 @@ calc_sheet <- costs %>%
   mutate(tech_shr_of_vmt = VMTShr * final_mkt_shr,
          tech_shr_of_trk = TruckShr * final_mkt_shr)
 
-calc_sheet %>%
-  pivot_wider(names_from = "tech", values_from = "final_mkt_shr") %>%
-  filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
-  View()
-
 shares_by_flt <- calc_sheet %>%
   group_by(yr, cls, flt, tech) %>%
   summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt),
             tech_shr_of_trk = sum(tech_shr_of_trk))
-
-shares_by_flt %>%
-  filter(yr > 2020 & tech == "adv_conv") %>% # tech_type != "base" &
-  View()
 
 shares_by_tech <- shares_by_flt %>%
   group_by(yr, cls, tech) %>%
   summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt),
             tech_shr_of_trk = sum(tech_shr_of_trk))
 
+
+
+#___________________________________________________________________
+# tests ####
+
+calc_sheet %>%
+  pivot_wider(names_from = "tech", values_from = "final_mkt_shr") %>%
+  filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
+  View()
+
+shares_by_flt %>%
+  filter(yr > 2020 & tech == "adv_conv") %>% # tech_type != "base" &
+  View()
+
 shares_by_tech %>%
   filter(yr > 2020 & tech == "adv_conv") %>% # tech_type != "base" &
   View()
 
 
-
-
-
+# variables
+#
 # fuel
 # - defined in tech_options
 #

@@ -2,12 +2,7 @@
 library(shiny)
 library(readxl); library(tidyxl);
 library(janitor); library(magrittr)
-library(tidyverse)
-
-# pkg list for photon
-# shiny,readxl,tidyxl,janitor,magrittr,tidyverse
-# NULL
-# NULL
+library(tidyverse); library(here)
 
 source("fns.R")
 
