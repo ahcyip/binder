@@ -85,6 +85,7 @@ safely_extract_stopdata <- function(stop_pg_link) {
               city = city,
               state = state))
   } else {
+    # this didn't seem to work/activate
     print(pg$error$message)
     pb$tick()
     return(list(id = id,
@@ -130,49 +131,56 @@ stop_info_list[[3]] <- links_states_3groups[[3]] %>%
   map_depth(1, extract_stop_pg_links_from_state_pg) %>% map_depth(2, safely_extract_stopdata)
 
 
-# not sure if 44124, 198722, 48681 were problems
-# (unused connection closed)
-# no error messages detected... known 404 problems...
+# known 404 problems: 44124, 198722 (98722?), 48681
 
 
-stop_info_df <- stop_info_list %>%
-  unlist(recursive = FALSE) %>%
-  unlist(recursive = FALSE) %>%
-  enframe() %>%
-  unnest_wider(value) %>%
-  filter(!is.na(raw_loc)) %>%
-  mutate(loc = str_match(raw_loc, "daddr=(.*)")[,2], #extract2
-         diesel = as.numeric(str_match(raw_desc, "([:digit:]*)\\s*diesel")[,2]),
-         Diesel = as.numeric(str_match(raw_desc, "([:digit:]*)\\s*Diesel")[,2]),
-         propane = str_detect(raw_desc, "ropane"),
-         biodiesel = str_detect(raw_desc, "BioDiesel|biodiesel|Biodiesel|bioDiesel|Bio Diesel|bio diesel|Bio diesel|bio Diesel")) %>%
-  rowwise() %>%
-  mutate(diesel_lanes = sum(diesel, Diesel, na.rm = T)) %>%
-  ungroup() %>%
-  #mutate(coords = list(set_names(str_split(loc, ","), c("lat","lon")))) %>%
-  ##unnest_wider(coords) %>%
-  separate(loc, c("lat","lon"), ",") %>%
-  mutate(lat = as.numeric(lat), lon = as.numeric(lon),
-         diesel_lanes_0 = if_else(diesel_lanes == 0, TRUE, FALSE),
-         region = to_any_case(state, "snake"))
-
-stop_info_df %>% View()
+(stop_info_df <- stop_info_list %>%
+    unlist(recursive = FALSE) %>%
+    unlist(recursive = FALSE) %>%
+    enframe() %>%
+    unnest_wider(value))
 
 
 #___________________________________________________________________
 # save RDS ####
-stop_info_df %>% saveRDS(here::here("stop_info.RDS"))
+stop_info_df %>% saveRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
 
 #___________________________________________________________________
 # read/mutate allstays data (start here) ####
-stop_info_df <- readRDS(here::here("stop_info.RDS"))
+stop_info_df <- readRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
 
 View(stop_info_df)
 
+#___________________________________________________________________
+# clean out duplicates ####
+stop_info_df %>% filter(region == "nv") %>% View()
+# turns out there are stops and fuel on both sides in the NV example that looked like duplicate
+# same with reno valero and nitenday (which had "commercial fueling")
+#https://www.google.com/maps/place/39%C2%B032'02.7%22N+119%C2%B047'07.3%22W/@39.5340885,-119.7854993,20z/data=!4m5!3m4!1s0x0:0x0!8m2!3d39.534076!4d-119.785368
 
-# __ truck parking spaces / Parking Spaces as indicator of size
-# "small stop" also sometimes indicated
-# chain as indicator of business
+# check 404 ####
+
+# more processing ####
+(stops_processed <- stop_info_df %>%
+  filter(!is.na(raw_loc)) %>%
+  mutate(loc = str_match(raw_loc, "daddr=(.*)")[,2]) %>% #extract2 if pipes desired
+  separate(loc, c("lat","lon"), ",") %>%
+  mutate(lat = as.numeric(lat),
+         lon = as.numeric(lon),
+         region = as.factor(to_any_case(state, "snake")),
+         state = as.factor(state),
+         chain2 = as.factor(str_match(chain, "_(.*)_")[,2]),
+         diesel_lanes = as.numeric(str_match(raw_desc, "([:digit:]*)\\s*[dD]iesel")[,2]),
+         propane = str_detect(raw_desc, "[pP]ropane"),
+         biodiesel = str_detect(raw_desc, "[bB]io\\s*[dD]iesel"),
+         diesel_lanes_NA = if_else(is.na(diesel_lanes), TRUE, FALSE),
+         diesel_lanes_NAas1 = if_else(diesel_lanes_0, 1, diesel_lanes),
+         diesel_lanes_NAas0 = if_else(diesel_lanes_0, 0, diesel_lanes)))
+
+#___________________________________________________________________
+# chains ####
+
+# lane summary by chain
 
 # AM Best
 # Flying J Travel Plaza
@@ -182,7 +190,6 @@ View(stop_info_df)
 # Pilot Travel Center
 # Speedco commercial
 # TA Travel Center
-
 ### [independent] Indie Truck Stop
 
 # other irrelevant categories
@@ -197,73 +204,115 @@ View(stop_info_df)
 ## Western Star Dealer
 ## thermo king
 ## utility dealer
+stops_processed %>%
+  group_by(chain2) %>%
+  summarize(n = n(),
+            med_raw = median(diesel_lanes, na.rm = T),
+            min_raw = min(diesel_lanes, na.rm = T),
+            max_raw = max(diesel_lanes, na.rm = T),
+            mean_assuming_1for0 = round(mean(diesel_lanes_NAas1), 1),
+            med_assuming_1for0 = median(diesel_lanes_NAas1)) %>%
+  arrange(desc(n)) %>%
+  View()
+
+
+# chains in each state
+stops_processed %>%
+  tabyl(state, chain2) %>%
+  View()
+
+#___________________________________________________________________
+# parking (indicator of size?) ####
+## also, check out truck stops data emailed from margo's team
+
+stops_processed %>%
+  mutate(parking = as.numeric(str_match(raw_desc, "([:digit:]+)\\s*[pP]arking")[,2]),
+         truckparking = as.numeric(str_match(raw_desc, "([:digit:]+)\\s*[tT]+ruck\\s*[pP]arking")[,2]),
+         spaces = as.numeric(str_match(raw_desc, "([:digit:]+)\\s*[sS]paces")[,2]),
+         noparking = as.factor(str_match(raw_desc, "(no|No|NO)\\s*[pP]arking")[,2]),
+         smallstop = str_detect(raw_desc, "[sS]mall\\s*[sS]top")) %>%
+  select(parking, truckparking, spaces, noparking, smallstop) %>%
+  summary()
+
+# the 3 words before parking (if no number / number + truck)
+stops_processed %>%
+  mutate(parking = as.factor(str_match(raw_desc, "\\s+([:alnum:]*\\s+[:alnum:]*\\s*[:alnum:]+)\\s+[pP]arking")[,2])) %>%
+  group_by(parking) %>%
+  summarize(n=n()) %>%
+  arrange(desc(n)) %>%
+  filter(!str_detect(parking, "\\s*[:digit:]+\\s*")) %>%
+  #filter(str_detect(parking, "\\s*[:alpha:]+\\s*")) %>%
+  View()
 
 
 
-# clean out duplicates
-# check 404
+
 
 
 #___________________________________________________________________
 # analyze truck stop numbers and diesel lanes ####
-stop_info_df %>% nrow()
+stops_processed %>% nrow()
 
-stop_info_df %>%
+stops_processed %>%
   tabyl(diesel_lanes) %>%
   mutate(total_diesel_lanes = diesel_lanes * n) %>%
   pull(total_diesel_lanes) %>%
-  sum()
+  sum(na.rm = TRUE) #15728
+
+# number and proportion of truck stops with no diesel lane info
+stops_processed$diesel_lanes_NA %>% sum(na.rm = TRUE) #3441
+1 - (stops_processed$diesel_lanes_NA %>% sum() / (stops_processed %>% nrow()))
 
 
-# number and proportion of truck stops with 0 diesel lanes
-stop_info_df$diesel_lanes_0 %>% sum()
-
-1 - (stop_info_df$diesel_lanes_0 %>% sum() / (stop_info_df %>% nrow()))
-
-state_summary <- stop_info_df %>%
+# state summary helps inform which state to focus on (fewest NAs for diesel lane information)
+(state_summary <- stops_processed %>%
   group_by(region, diesel_lanes) %>%
   summarize(count = n()) %>%
   mutate(total_in_state = sum(count),
     proportion = count / total_in_state,
          avail = 1-proportion) %>%
-  filter(diesel_lanes == 0) %>%
-  arrange(desc(avail))
+  filter(is.na(diesel_lanes)) %>%
+  arrange(desc(avail)))
 
-
-# number of truck stops offering propane?
-stop_info_df$propane %>% sum()
-
-
-# which state to focus on? look at state summary
-View(state_summary)
 
 # lanes histogram total
-stop_info_df %>%
+stops_processed %>%
+  mutate(diesel_lanes)
   ggplot() +
   geom_histogram(aes(diesel_lanes)) +
   ggtitle("diesel lane information for all stations in US")
 
 # histograms per state (selected)
-stop_info_df %>%
+stops_processed %>%
   filter(state %in% c("nevada", "texas", "connecticut", "oregon", "ohio", "florida")) %>%
 ggplot() +
   geom_histogram(aes(diesel_lanes)) +
   facet_wrap(vars(state), scales = "free_y")
 
 # histograms for non-zero-lane stations
-stop_info_df %>%
+stops_processed %>%
   filter(diesel_lanes != 0) %>%
   ggplot() +
   geom_histogram(aes(diesel_lanes)) +
   facet_wrap(vars(state))
 
 # histogram for nevada
-stop_info_df %>%
+stops_processed %>%
   filter(state == "nevada") %>%
   ggplot() +
   geom_histogram(aes(diesel_lanes)) +
   facet_wrap(vars(state))
 
+
+
+
+
+# alt fuels
+# number of truck stops offering propane* (may not be for propulsion) or biodiesel?
+stops_processed %>%
+  select(propane, biodiesel) %>%
+  summary()
+#cng? lng? electric?
 
 
 #___________________________________________________________________
@@ -298,13 +347,13 @@ register_google(Sys.getenv("google_cloud_apikey"))
 # y_lim <- close_up$data[c(1, 4), 2] * c(1.003, 1)
 map_with_stops <- function(gmap, state_name) {
   gg <- ggmap(gmap) +
-    geom_point(data = stop_info_df %>% filter(state == state_name),
+    geom_point(data = stops_processed %>% filter(state == state_name),
                mapping = aes(x = lon, y = lat),
                color = "red",
                size = 5,
                alpha = 1,
                shape = 1) +
-    geom_label_repel(data = stop_info_df %>% filter(state == state_name),
+    geom_label_repel(data = stops_processed %>% filter(state == state_name),
                      mapping = aes(x = lon, y = lat,
                                    label = diesel_lanes,
                                    col = diesel_lanes_0),
@@ -328,7 +377,7 @@ map_with_stops(nevada, "nevada")
 
 
 # maps of each station in nevada
-nevada_stops_maps <- stop_info_df %>%
+nevada_stops_maps <- stops_processed %>%
   filter(state == "nevada") %>%
   #slice_head(n=5) %>%
   select(lon, lat) %>%
@@ -349,7 +398,7 @@ nv_ggs[[5]]
 states_map %>%
   ggplot()+
   geom_polygon(aes(long, lat, group = group), fill = "grey", color = "white") +
-  geom_point(data = stop_info_df %>% filter(region != "alaska"),
+  geom_point(data = stops_processed %>% filter(region != "alaska"),
              mapping = aes(x = lon, y = lat),
              color = "red",
              size = 1,
