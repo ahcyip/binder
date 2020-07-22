@@ -44,6 +44,10 @@ ui <- fluidPage(
 
 server <- function(input, output){
 
+  # callModule(mod_read_xls, "m1")
+  # in dev
+
+
   output$contents_TO <- renderTable({
     req(input$file1)
     names <- get_names(input$file1)
