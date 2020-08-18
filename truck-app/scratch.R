@@ -196,15 +196,20 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
          # Alicia Birky:
          # The preference factor represents the fraction, in competition with the base, that consumers would purchase if purchase cost and fuel cost were the same as the base.  Set value =0.5 for no bias/preference.
          pref_factor = if_else(yr < intro_yr, 0,
-                               intro + curve_for_preference_factor_phase_in(yr - intro_yr) * (final - intro) * fuel_avail_pref_factor_multiplier),
+                               intro +
+                                 curve_for_preference_factor_phase_in(yr - intro_yr) *
+                                 (final - intro) * fuel_avail_pref_factor_multiplier),
 # fuel availability affects preference factor here (and fuel availability doesn't affect anywhere else.)
 # preference factor applied as a multiplier to either indiff curve result and adoption curve result.
 # preference factor also affects the final market share calculation, where
 
-         # Indifference Costs
-         # Alicia Birky:
-         # These are threshold costs within which the buyer is relatively indifferent to cost differences.
-         # Probability of purchase is an S-Curve based on ratio of actual cost to threshold.
+# Indifference Costs
+# Alicia Birky:
+# These are threshold costs within which the buyer is relatively indifferent to cost differences.
+# Probability of purchase is an S-Curve based on ratio of actual cost to threshold.
+#
+# if it's similar cost and pays back quickly
+
          indifference_calc = if_else(inc_cost <= incr_cost & monthly_savings >= -fuel_mo,
 # incr_cost is the indifference cost - incr cost from Tech Options table
 # fuel_mo is the indifference cost - fuel from Tech Options table
@@ -212,6 +217,10 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
                                      0),
 
          # Incremental Cost Factor (adjusts adoption rate at the end)
+         # if it pays back but costs 2x, cash flow / cash availability may be restricted
+         # is this covered in adoption curve?
+         # same payback but large incremental cost may dissuade
+
          inc_cost_adj = if_else(inc_cost < 0, 1, curve_for_adj_incr_cost(inc_cost/base_cost)),
 
          adoption_curve = RunModel$adoption_curve %>% pull()) %>%
@@ -226,7 +235,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
   # "indifference calc", which is pref_factor * "indifference curves", if costs are below threshold, and
                                                 pmax(indifference_calc,
   # "adoption rate", which is pref_factor / 0.5 (max pref factor) * adoption % according to payback
-                                                    pref_factor/0.5*cumulative_proportion_willing_to_adopt))),
+                                                    pref_factor /0.5 * cumulative_proportion_willing_to_adopt))),
 # =MIN(1,MAX(AD24,IF(Y24>85,0,(AI24/0.5)*VLOOKUP(Y24,AdoptDec,$AU$18,0))))
 # So this is either pref_factor * adoption curve %, or pref_factor * "indifference curves"
 
@@ -243,9 +252,13 @@ adj_indiv_tech_adoption_rate = if_else(tech_type == "base", 0,
   group_by(yr, cls, flt, cohort) %>%
   mutate(final_mkt_shr = case_when(tech_type == "base" ~ NA_real_,
                                    sum(adj_indiv_tech_adoption_rate) == 0 ~ 0,
-                                   TRUE ~ max(adj_indiv_tech_adoption_rate) * pref_factor * adj_indiv_tech_adoption_rate / sum(pref_factor * adj_indiv_tech_adoption_rate, na.rm = T)),
+                                   TRUE ~ max(adj_indiv_tech_adoption_rate) *
+                                     pref_factor * adj_indiv_tech_adoption_rate / sum(pref_factor * adj_indiv_tech_adoption_rate, na.rm = T)),
          final_mkt_shr = if_else(tech_type == "base", 1-sum(final_mkt_shr, na.rm = T), final_mkt_shr)) %>%
 # =IF(SUM($AX42:$BB42)=0,0,MAX($AX42:$BB42)*(AI42*AX42/SUMPRODUCT($AI42:$AM42,$AX42:$BB42)))
+#
+# removed
+#
   ungroup() %>%
   mutate(tech_shr_of_vmt = VMTShr * final_mkt_shr,
          tech_shr_of_trk = TruckShr * final_mkt_shr)
@@ -340,6 +353,7 @@ shares_by_tech_conv_only <- build_calc_sheet() %>%
 plot_mktpen_vmt(shares_by_tech_conv_only, "20200221-conventional_only.png")
 
 # calculate a composite baseline - wt avg cost & fe (weighted by vmt share)
+# ## harmonic mean of fe
 new_baseline_composite <- shares_by_tech_conv_only %>%
   filter(cls %in% "78Sleep" &
            tech %in% c("conventional_diesel_ice", "adv_conv", "isg", "hev")) %>%
@@ -387,11 +401,21 @@ redistributed_conventional_composite <- shares_by_tech_after_composite %>%
 
 plot_mktpen_vmt(redistributed_conventional_composite, "20200221-redist-composite.png")
 
+
 # reload Cls1-specific inputs when done
 
 
 
+# indicate nests in input tables
 
+
+#___________________________________________________________________
+# payback analysis ####
+
+crossing()
+
+list(%>%
+map(payback(..1, ..2, 0.07/12))
 
 
 
