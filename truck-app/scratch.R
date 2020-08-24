@@ -145,20 +145,28 @@ shares_by_tech <- build_calc_sheet() %>%
   calc_results_by_flt_and_tech() %>%
   calc_results_by_tech()
 
+shares_by_tech %>%
+  write_csv("shares_by_tech.csv")
+
 
 #___________________________________________________________________
 # tests ####
 
 # payback
-results %>%
+payback_result <- build_calc_sheet() %>%
+  calc_pb_and_mktshrs() %>%
   pivot_wider(names_from = "tech", values_from = "payback") %>%
-  filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
-  View()
+  filter(yr > 2020 & flt == "NCent" & cohort == ">200") # tech_type != "base" &
+
 # replicates 2020-02-21 results.
 # not sure why results are different in Copy of truck 0221 (0426 results)
 
+payback_result %>%
+  write_csv("payback.csv")
+
 # final market share check
-results %>%
+build_calc_sheet() %>%
+  calc_pb_and_mktshrs() %>%
   pivot_wider(names_from = "tech", values_from = "final_mkt_shr") %>%
   filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
   View()
