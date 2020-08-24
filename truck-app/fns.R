@@ -69,22 +69,29 @@ convert_input_to_long <- function(input_table, tech_cols, values_to) {
 #___________________________________________________________________
 # adoption ####
 
-payback <- function(inc_cost, monthly_savings, monthly_disc_rate, max_pd = 1000) {
-  # payback period (with consideration of discounted cash flows)
-  # can be calculated via subtraction method like in TRUCK VBA
+payback <- function(inc_cost, monthly_savings, monthly_disc_rate, max_pd = 1000, raw = FALSE) {
+  # vectorized function calculating payback period (with consideration of discounted cash flows)
+  # can alternatively be calculated via subtraction method like in TRUCK VBA
 
   # monthly_savings is constant (i.e. expected fuel cost stays constant from year of decision/purchase)
   # # i.e. no expectation of change in fuel cost through lifetime.
 
-  return(if_else(
-    # if monthly savings are 0 or negative, or if monthly savings are not enough to overcome incremental cost,
-    #   then return max_pd
-    monthly_savings <= rep(0, length(monthly_savings)) | (inc_cost * monthly_disc_rate)/monthly_savings >= 1, max_pd,
-    # else, calculate discounted payback period via equation (works for equal cash flows)
-    # https://financeformulas.net/Discounted-Payback-Period.html
-    pmin(
-      ceiling(log(1/(1-(inc_cost * monthly_disc_rate)/monthly_savings))/log(1+monthly_disc_rate)),
-      max_pd)))
+  if (raw == FALSE) {
+    pb <- if_else(
+      # if monthly savings are 0 or negative, or if monthly savings are not enough to overcome incremental cost,
+      #   then return max_pd
+      monthly_savings <= rep(0, length(monthly_savings)) | (inc_cost * monthly_disc_rate)/monthly_savings >= 1, max_pd,
+      # else, calculate discounted payback period via equation (works for equal cash flows)
+      # rounded up to nearest whole number, and with max of max_pd
+      # https://financeformulas.net/Discounted-Payback-Period.html
+      pmin(
+        ceiling(log(1/(1-(inc_cost * monthly_disc_rate)/monthly_savings))/log(1+monthly_disc_rate)),
+        max_pd))
+  } else if (raw == TRUE) {
+    pb <- log(1/(1-(inc_cost * monthly_disc_rate)/monthly_savings))/log(1+monthly_disc_rate)
+  }
+
+  return(pb)
 }
 
 # VBA function for payback, subtraction method
