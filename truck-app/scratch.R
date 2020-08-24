@@ -19,7 +19,8 @@ input <- list()
 
 input$file1$datapath <- #here::here("TRUCK78_20200710.xlsm")
   #here::here("truck-app", "workingCopy of TRUCK78_20200221.xlsm")
-  here::here("truck-app", "testing_newest_TRUCK_cheap.xlsm")
+  here::here("truck-app", "TRUCK78_20200710_fcev.xlsm")
+  #here::here("truck-app", "TRUCK78_20200710_original.xlsm")
 
 names <- get_names(input$file1)
 #View(names)
@@ -146,7 +147,7 @@ shares_by_tech <- build_calc_sheet() %>%
   calc_results_by_tech()
 
 shares_by_tech %>%
-  write_csv("shares_by_tech.csv")
+  write_csv("csv_output/shares_by_tech.csv")
 
 
 #___________________________________________________________________
@@ -162,7 +163,7 @@ payback_result <- build_calc_sheet() %>%
 # not sure why results are different in Copy of truck 0221 (0426 results)
 
 payback_result %>%
-  write_csv("payback.csv")
+  write_csv("csv_output/payback.csv")
 
 # final market share check
 build_calc_sheet() %>%
