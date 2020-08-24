@@ -5,13 +5,6 @@
 # if (!("tidyverse" %in% installed.packages())) {
 #   install.packages("tidyverse")
 # }
-# devtools::install_github("dkahle/ggmap", ref = "tidyup")
-# install.packages('ggrepel')
-# install.packages("maps")
-# install.packages(c("cowplot", "googleway", "ggplot2", "ggrepel",
-#                    "ggspatial", "libwgeom", "sf", "rnaturalearth", "rnaturalearthdata"))
-#install.packages("progress")
-#install.packages("geofacet")
 #___________________________________________________________________
 # load packages (must run every time) ####
 library(maps);
@@ -101,9 +94,6 @@ safely_extract_stopdata <- function(stop_pg_link) {
   }
 }
 
-stage_pg_link_from_id <- function(id) {
-  paste0("https://www.allstays.com/truckstops-details/", id, ".php")
-}
 
 stop_info_list <- list()
 
@@ -138,6 +128,45 @@ stop_info_list[[3]] <- links_states_3groups[[3]] %>%
     enframe() %>%
     unnest_wider(value))
 
+#___________________________________________________________________
+# mine all truck stop php pages !!! ####
+
+stage_pg_link_from_id <- function(id) {
+  paste0("https://www.allstays.com/truckstops-details/", id, ".php")
+}
+
+one_hundred_thousand_links <- 1:100000 %>% stage_pg_link_from_id()
+links_100k_split_3 <- one_hundred_thousand_links %>%
+  split(., cut(seq_along(.), 3, labels = FALSE))
+
+stop_info_list_100k <- list()
+pb <- progress_bar$new(format = "  progress [:bar] :percent eta: :eta",
+                       total = links_100k_split_3[[1]] %>% length(),
+                       clear = FALSE, show_after = 10)
+stop_info_list_100k[[1]] <- links_100k_split_3[[1]] %>%
+  purrr::map(safely_extract_stopdata)
+pb <- progress_bar$new(format = "  progress [:bar] :percent eta: :eta",
+                       total = links_100k_split_3[[2]] %>% length(),
+                       clear = FALSE, show_after = 10)
+stop_info_list_100k[[2]] <- links_100k_split_3[[2]] %>%
+  purrr::map(safely_extract_stopdata)
+pb <- progress_bar$new(format = "  progress [:bar] :percent eta: :eta",
+                       total = links_100k_split_3[[3]] %>% length(),
+                       clear = FALSE, show_after = 10)
+stop_info_list_100k[[3]] <- links_100k_split_3[[3]] %>%
+  purrr::map(safely_extract_stopdata)
+
+
+
+# 33311 ??? unusedconnection
+stop_info_list_100k %>%
+  map_depth(2, "id") %>% #"raw_desc"
+  enframe() %>%
+  View()
+
+  unnest(cols = value) %>%
+  mutate(value = as.factor(value)) %>%
+  summary()
 
 #___________________________________________________________________
 # save RDS ####
@@ -147,7 +176,7 @@ stop_info_df %>% saveRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
 #___________________________________________________________________
 # read/mutate allstays data (start here) ####
 stop_info_df <- readRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
-
+#readRDS("C:/Users/ayip/Desktop/vtap/binder/allstays-analysis/stop_info_df.RDS")
 View(stop_info_df)
 
 #___________________________________________________________________
@@ -160,8 +189,67 @@ stop_info_df %>% filter(region == "nv") %>% View()
 
 # check 404 ####
 stop_info_df %>% filter(is.na(raw_loc)) %>% View()
-# known 404 problems that showed up as unused connections: 44124, 198722, 48681 (2x)
-# ignore for now.
+# known 404 problems that showed up as unused connections: 44124, 198722, 48681, 48881
+# and an NA!
+# https://www.allstays.com/c/truck-stops-colorado.htm
+# Burlington
+# Travel Shoppe I-70 Ex 437 (Hwy 385), 415 S. Lincoln St…
+# 20 truck parking spaces - 4 Diesel lanes - 2 Showers - Restaurant - ATM - FedEx - UPS - Engine Repair - D…More
+# Burlington Travel Shoppe -
+#   I-70 Ex 437 (Hwy 385), 415 S. Lincoln St, Burlington CO
+# 80807
+# 20 truck parking spaces - 4 Diesel lanes - 2 Showers -
+#   Restaurant - ATM - FedEx - UPS - Engine Repair - Dump -
+#   RVs Welcome - Travel Store - TCH - Comdata - Trailer Drop -
+#   Pay Phones (TS)
+# View Map - Navigation - Add/Check Reviews
+# 39.295815, -102.279517
+
+# california
+# 44124
+# Patterson Flying J Travel Plaza -
+#   I-5 Exit 434, 2275 Sperry Ave, Patterson CA 95387
+# Fax: 209-892-2739 - 130 parking spaces - 9 diesel lanes - 9
+# showers - Cinnabon - Wendys - PJ Fresh - Internet - 9 Bulk
+# DEF - CAT Scales - Laundry - ATM - 2 RV Lanes - RV Dump
+# Station($10, far right of RV fuel lanes) - Propane (difficult to
+#                                                     access without backing up) - Trucker Lounge - Western Union
+# - Check Cashing - Game Room - FedEx - UPS - DAT -
+#   Fuelman (TS)
+# View Map - Navigation - Add/Check Reviews
+# 37.464774, -121.165269
+
+stop_info_df %>% filter(name %in% c(3131, 3132, 3133, 3134, 3135)) %>% View()
+
+# accidentally typed in 91213 and found a truck stop but it's not on the state list and so it's not in my data.
+# Cougar Corner
+# https://maps.google.com/maps?q=37.922069,-83.259815 # this shows a marathon... but it's also not on the list.
+# Truck Stop Location:
+#   US460, 1741 W Main St, West Liberty KY 41472 # this address shows a shell on gmaps...
+# Truck Stop Details:
+#   small stop (TS)
+
+# hmm. maybe i should just loop through 1:100000
+
+
+
+stop_info_df %>% filter(name %in% c(3938, 3939, 3940, 4913, 4914, 4915)) %>% View()
+# 3939	48681	summer shade 36.877825 -85.665952
+# in the pdf!
+# Summer Shade Five Star Marathon -
+# 4770 Summer Shade Rd, Summer Shade KY 42166
+# no truck parking - 4 Diesel lanes - ATM (TS)
+# View Map - Navigation - Add/Check Reviews
+#
+# 4914	48881 in PDF. 34.970393 -104.790945
+# Santa Rosa Sinclair -
+#   1009 Stuckeys Rd, I-40 Frontage Rd and County Rd 4 H,
+# Santa Rosa NM 88435
+# 25 truck parking spaces - Store - 3 Diesel lanes - Air Fill - Pay
+# phone - ATM - Y - Propane tanks
+# View Map - Navigation - Add/Check Reviews
+
+
 
 
 # more processing ####
@@ -198,6 +286,10 @@ stop_info_df %>% filter(is.na(raw_loc)) %>% View()
           pksp_NA = is.na(pksp_total),
           k=2.3))
 
+
+
+# check data problems ####
+
 stops_processed %>%
   filter(diesel_lanes == 0) %>%
   View()
@@ -208,6 +300,28 @@ stops_processed %>%
 # new? speedway diesel lanes? nvm that's the pilot of 6.
 # OK this might be legit...
 # may not be the only one? maybe intercept of model doesn't need to be raised to k=2.3.
+
+
+stops_processed %>% filter(is.na(lon)) %>% View() # nrow()
+# 16 stops without lat lons
+# most don't have location links in the pdf either.
+# could use google geocode to figure them out.
+
+# register_google
+
+stops_with_missing_latlon <- stops_processed %>%
+  filter(is.na(lon)) %>%
+  mutate(address_full = paste(address,city,state,postalCode, sep = ", ")) %>%
+  mutate_geocode(address_full, output = "latlona")
+
+stops_with_missing_latlon %>% View()
+
+stops_with_missing_latlon %>% saveRDS("stops_w_missing_latlon.RDS")
+
+# to do:
+# join these back in.
+# manual edit those addresses to find a better location?
+# find "10 parralel area truck parking space" and maybe erase certain words/phrases?
 
 #___________________________________________________________________
 # no parking analysis ####
