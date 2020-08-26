@@ -165,34 +165,40 @@ adoption_tbl <- AdoptionDecision$AdoptDec %>%
 #___________________________________________________________________
 # Run ####
 
-shares_by_tech <- build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
+completed_calc_sheet <- build_calc_sheet() %>% calc_pb_and_mktshrs()
+
+shares_by_tech <- completed_calc_sheet %>%
   calc_results_by_flt_and_tech() %>%
   calc_results_by_tech()
 
+shares_by_tech %>%
+  write_csv("csv_output/shares_by_tech.csv")
 
 #___________________________________________________________________
 # tests ####
 
 # payback
-build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
+payback_results <- completed_calc_sheet %>%
   pivot_wider(names_from = "tech", values_from = "payback") %>%
-  filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
-  View()
-# replicates 2020-02-21 results.
-# not sure why results are different in Copy of truck 0221 (0426 results)
+  filter(yr > 2020 & flt == "NCent" & cohort == ">200") # tech_type != "base" &
+
+# TRUCK78_20200221 results successfully replicated.
+# Paybacks/mktshrs are different from those in Copy of truck 20200221 (last run in 20200426)
+
+payback_results %>%
+  write_csv("csv_output/payback.csv")
+
 
 
 # final market share check
-build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
+completed_calc_sheet %>%
   pivot_wider(names_from = "tech", values_from = "final_mkt_shr") %>%
   filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
   View()
 
 
-# shares_by_flt %>%
+# completed_calc_sheet %>%
+#   calc_results_by_flt_and_tech() %>%
 #   filter(yr > 2020 & tech == "adv_conv") %>% # tech_type != "base" &
 #   View()
 #
