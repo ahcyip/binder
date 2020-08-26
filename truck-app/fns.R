@@ -30,15 +30,26 @@ read_all_names_in_tab <- function(location, names, input_file) {
 }
 
 
-convert_input_to_long <- function(input_table, tech_cols, values_to) {
+load_tech_options <- function(params, clsname, cols) {
+  params %>%
+    mutate(cls = clsname) %>%
+    set_colnames(c(cols %>% as.character(), "cls")) %>%
+    clean_names() %>%
+    mutate(description = make_clean_names(description)) %>%
+    select(-na, -na_2) %>% # remove 2nd & 3rd empty columns
+    mutate(monthly_mi_dep_savings = 0) # to do / missing
+}
+
+
+convert_input_to_long <- function(input_table, tech_opt_desc, clsname, tech_cols, values_to) {
   if (tech_cols == "base_and_alts")
-    tech_col_names <- Inputs78Sleep$TECH_OPT_DESC_Cls1 %>% pull()
+    tech_col_names <- tech_opt_desc %>% pull()
   else # i.e. alts_only
-    tech_col_names <- Inputs78Sleep$TECH_OPT_DESC_Cls1 %>% pull() %>% magrittr::extract(seq(2, nrow(Inputs78Sleep$TECH_OPT_DESC_Cls1)))
+    tech_col_names <- tech_opt_desc %>% pull() %>% magrittr::extract(seq(2, nrow(tech_opt_desc)))
 
   output1 <- input_table %>%
-    bind_cols(Inputs78Sleep$Years,
-              cls = rep("78Sleep", nrow(Inputs78Sleep$Years))) %>% # set class here
+    bind_cols(Years,
+              cls = rep(clsname, nrow(Years))) %>% # set class here
     set_colnames(c(tech_col_names, "yr", "cls")) %>%
     clean_names()
 
@@ -125,6 +136,7 @@ payback <- function(inc_cost, monthly_savings, monthly_disc_rate, max_pd = 1000,
 
 #  Curve for indifference to first cost and fuel cost savings
 # This curve applies when incremental cost is small and fuel costs are similar.  Thresholds are set by "indifference costs."
+# > this should be renamed "tolerances"
 # Weibull: F(p) = 1-e^(-(p/k2)^k1)
 # k1>1; k2>0
 # k1 =	7		3	adjusts skew
@@ -236,6 +248,8 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
                                            RunModel$disc_rate %>% as.numeric() %>% divide_by(12),
                                            # discount rate should be re-calculated properly instead of simple divide by 12
                                            max_pd = 86)),
+
+
            # Preference Factor
            # Alicia Birky:
            # The preference factor represents the fraction, in competition with the base, that consumers would purchase if purchase cost and fuel cost were the same as the base.  Set value =0.5 for no bias/preference.
@@ -244,21 +258,49 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
                                    curve_for_preference_factor_phase_in(yr - intro_yr) *
                                    (final - intro) * fuel_avail_pref_factor_multiplier),
            # fuel availability affects preference factor here (and fuel availability doesn't affect anywhere else.)
-           # preference factor applied as a multiplier to either indiff curve result and adoption curve result.
-           # preference factor also affects the final market share calculation, where
+           # preference factor applied as a multiplier to both indiff curve result and adoption curve results.
+           # preference factor also affects the final market share calculation where shares are re-split
+
+           #=IF($A24<AI$23,0,
+           #AI$21+VLOOKUP($A24-AI$23,SCdata,2,1)*(AI$22-AI$21))*@IF($D$5="Non-Central",INDEX(fuel_avail,$A24-$A$24+1,MATCH(O$21,Fuels,0)),1)
+
+           #EXAMPLE
+           #3 yrs in
+           # PF = 0 + 0.3 for 3 yrs on logistic * (0.5-0) * FA
+
+
 
            # Indifference Costs
            # Alicia Birky:
            # These are threshold costs within which the buyer is relatively indifferent to cost differences.
            # Probability of purchase is an S-Curve based on ratio of actual cost to threshold.
-           #
-           # if it's similar cost and pays back quickly or loses a tiny amount of money (never pays back)
+
+           #20200221
+           #=IF(AND(C24<=AD$21,$N24-O24>=-AD$22),AI24*VLOOKUP(C24/AD$21,FirstCostInd,2,TRUE)*VLOOKUP(($N24-O24)/AD$22,FuelCostInd,2,1),0)
+
+           #20200710
+           #=IF(AND(C24<=AD$21,$N24-O24>=-AD$22),AI24*VLOOKUP(C24/AD$21,FirstCostInd,2,TRUE)*VLOOKUP(($N24-O24)/AD$22,FuelCostInd,2,1),0)
+
+           # proposed change: abs($N24-O24)
+
+           # based on 20200221 equation, looks like the idea was:
+           # calculate if inc_cost < $5000 AND monthly savings (diesel - altfuel) > -$100
+           # no change (max "50%" (after pf) adoption) when fuel savings > 0-1x indiff_tolerance of $100
+           # some change when fuel savings are between -1x to 0x
+
+           # supposed to handle cases of:
+           # if it's similar cost and pays back quickly
+           # or even if it loses a tiny amount of money (never pays back)
 
            indifference_calc = if_else(inc_cost <= incr_cost & monthly_savings >= -fuel_mo,
                                        # incr_cost is the indifference cost - incr cost from Tech Options table
                                        # fuel_mo is the indifference cost - fuel from Tech Options table
-                                       pref_factor * curve_for_indiff_to_first_cost(inc_cost/incr_cost) * curve_for_indiff_to_fuel_cost_savings(monthly_savings/fuel_mo),
+                                       pref_factor *
+                                         curve_for_indiff_to_first_cost(inc_cost/incr_cost) *
+                                         curve_for_indiff_to_fuel_cost_savings(monthly_savings/fuel_mo),
                                        0),
+
+
 
            # Incremental Cost Factor (adjusts adoption rate at the end)
            # if it pays back but costs 2x, cash flow / cash availability may be restricted
@@ -281,7 +323,8 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
                                                         # "adoption rate", which is pref_factor / 0.5 (max pref factor) * adoption % according to payback
                                                         pref_factor /0.5 * cumulative_proportion_willing_to_adopt))),
            # =MIN(1,MAX(AD24,IF(Y24>85,0,(AI24/0.5)*VLOOKUP(Y24,AdoptDec,$AU$18,0))))
-           # So this is either pref_factor * adoption curve %, or pref_factor * "indifference curves"
+           # So this is either pref_factor /0.5 * adoption curve %,
+           # or pref_factor * "indifference curves"
 
            # final adjustment of individual tech adoption rate by incremental_cost_adjustment
            adj_indiv_tech_adoption_rate = if_else(tech_type == "base", 0,
@@ -301,7 +344,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
            final_mkt_shr = if_else(tech_type == "base", 1-sum(final_mkt_shr, na.rm = T), final_mkt_shr)) %>%
     # =IF(SUM($AX42:$BB42)=0,0,MAX($AX42:$BB42)*(AI42*AX42/SUMPRODUCT($AI42:$AM42,$AX42:$BB42)))
     #
-    # >>> TO DO: remove PF in this weighting function
+    # >>> TO DO: remove PF in this weighting function because it's a double penalty
     #
     ungroup() %>%
     mutate(tech_shr_of_vmt = VMTShr * final_mkt_shr,
@@ -323,16 +366,20 @@ calc_results_by_tech <- function(calculated_results_by_flt_and_tech) {
     summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt), tech_shr_of_trk = sum(tech_shr_of_trk))
 }
 
-plot_mktpen_vmt <- function (shares_by_tech, filename) {
+plot_mktpen_vmt <- function(shares_by_tech, filename) {
   gg1 <- shares_by_tech %>%
-    mutate(tech = tech %>% fct_relevel(c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) %>%
     ggplot() +
-    geom_area(aes(x = yr, y = tech_shr_of_vmt, fill = tech)) +
+    geom_area(aes(x = yr, y = tech_shr_of_vmt, fill = fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+    # Options for legend/colour order:
+    ## tech %>% fct_relevel(tech, c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) %>% # this was the order in the TRUCK excel model.
+    ## fct_reorder2(tech, yr, tech_shr_of_vmt)) %>% # this will order it by size
     facet_wrap(vars(cls)) +
     scale_x_continuous(limits = c(2016,2050)) +
-    scale_fill_hue() +
+    scale_fill_manual(values = c("#0079C2", "#00A4E4", "#F7A11A", "#FFC423", "#5D9732",
+                                 "#8CC63F", "#933C06", "#D9531E", "#5E6A71", "#D1D5D8")) +
     theme_minimal() +
-    theme(legend.position = "bottom") +
+    theme(legend.position = "right",
+          axis.text.x.bottom = element_text(angle = 90)) +
     labs(x ="Year", y = "Share of new vehicle miles in market", fill = "Technology")
   gg1
   ggsave(filename, gg1, width = 8, height = 6)
