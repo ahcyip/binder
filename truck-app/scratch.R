@@ -183,11 +183,13 @@ shares_by_tech %>%
 # tests ####
 
 # payback
-build_calc_sheet() %>%
+payback_result <- build_calc_sheet() %>%
   calc_pb_and_mktshrs() %>%
   pivot_wider(names_from = "tech", values_from = "payback") %>%
   filter(yr > 2020 & flt == "NCent" & cohort == ">200") # tech_type != "base" &
 
+payback_result %>%
+  write_csv("csv_output/payback.csv")
 # replicates 2020-02-21 results.
 # not sure why results are different in Copy of truck 0221 (0426 results)
 
