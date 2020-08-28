@@ -401,8 +401,8 @@ plot_mktpen_of_techs <- function(shares_by_tech, filename, var_to_plot) {
     ggplot() +
     geom_area(aes(x = yr,
                   y = !!var,
-                  fill = fct_reorder2(tech, yr, tech_shr_of_vmt))) +
-                    # fct_relevel(tech, c("adv_conv", "hev", "bev", "fcev", "conventional_diesel_ice")) %>% fct_rev())) +
+                  fill = #fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+                  fct_relevel(tech, c("fcev","bev","hev","adv_conv","conventional_diesel_ice")) %>% fct_rev())) +
     # Options for legend/colour order:
     ## fct_relevel(tech, c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) # this was the order in the TRUCK78_20200221 excel model.
     ## fct_reorder2(tech, yr, tech_shr_of_vmt)) %>% # this will order it by size
