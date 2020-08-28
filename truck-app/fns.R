@@ -397,18 +397,20 @@ calc_results_by_tech <- function(calc_sheet_completed) {
 plot_mktpen_of_techs <- function(shares_by_tech, filename, var_to_plot) {
   var <- sym(var_to_plot)
   gg1 <- shares_by_tech %>%
+    filter(tech != "na") %>%
     ggplot() +
     geom_area(aes(x = yr,
                   y = !!var,
-                  fill = fct_relevel(tech, c("adv_conv", "hev", "bev", "fcev", "conventional_diesel_ice")) %>% fct_rev())) + #fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+                  fill = fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+                    # fct_relevel(tech, c("adv_conv", "hev", "bev", "fcev", "conventional_diesel_ice")) %>% fct_rev())) +
     # Options for legend/colour order:
     ## fct_relevel(tech, c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) # this was the order in the TRUCK78_20200221 excel model.
     ## fct_reorder2(tech, yr, tech_shr_of_vmt)) %>% # this will order it by size
     facet_wrap(vars(fct_relevel(cls, c("78Sleep", "78Day", "78SU")))) +
     scale_x_continuous(limits = c(2016,2050)) +
-    # scale_fill_manual(values = c("#0079C2", "#00A4E4", "#F7A11A", "#FFC423", "#5D9732",
-    #                              "#8CC63F", "#933C06", "#D9531E", "#5E6A71", "#D1D5D8")) +
-    scale_fill_manual(values = c("red","green","purple","blue","light blue","light grey") %>% rev()) +
+    scale_fill_manual(values = c("#0079C2", "#00A4E4", "#F7A11A", "#FFC423", "#5D9732",
+                                 "#8CC63F", "#933C06", "#D9531E", "#5E6A71", "#D1D5D8")) +
+    #scale_fill_manual(values = c("red","green","purple","blue","light blue","light grey") %>% rev()) +
     theme_minimal() +
     theme(legend.position = "right",
           axis.text.x.bottom = element_text(angle = 90)) +

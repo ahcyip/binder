@@ -182,9 +182,10 @@ payback_results <- completed_calc_sheet %>%
 # Payback results were different from those in Copy of truck 20200221 (last run in 20200426)
 
 payback_results %>%
-  View("payback")
-  #write_csv("csv_output/payback.csv")
+  write_csv("csv_output/payback.csv")
 
+payback_results %>%
+  View("payback")
 
 # final market share check
 completed_calc_sheet %>%
@@ -206,25 +207,27 @@ completed_calc_sheet %>%
 #___________________________________________________________________
 # Mkt Pen Veh-Mi graphs ####
 
-plot_20200827 <- plot_mktpen_of_techs(shares_by_tech, "20200827.png", "tech_shr_of_vmt")
-plot_20200827_v7 <- plot_mktpen_of_techs(shares_by_tech, "20200827_v7.png", "tech_shr_of_vmt_v7")
+(plot_20200827 <- plot_mktpen_of_techs(shares_by_tech, "20200827.png", "tech_shr_of_vmt"))
 
-library(patchwork)
-plot_20200827 / plot_20200827_v7
+
+# testing v7
+#plot_20200827_v7 <- plot_mktpen_of_techs(shares_by_tech, "20200827_v7.png", "tech_shr_of_vmt_v7")
+# library(patchwork)
+# plot_20200827 / plot_20200827_v7
 
 
 
 #___________________________________________________________________
 # diagnose difference between v6 & v7 (pf^2 removed)
-shares_by_tech %>%
-  mutate(tech_shr_of_vmt_diff = tech_shr_of_vmt_v7 - tech_shr_of_vmt) %>%
-  pull(tech_shr_of_vmt_diff) %>%
-  summary()
+# shares_by_tech %>%
+#   mutate(tech_shr_of_vmt_diff = tech_shr_of_vmt_v7 - tech_shr_of_vmt) %>%
+#   pull(tech_shr_of_vmt_diff) %>%
+#   summary()
 # no diff in tech_shr_of_vmt!
 
-completed_calc_sheet %>% pull(pref_factor) %>% summary()
-completed_calc_sheet %>% filter(pref_factor>0) %>% View()
-completed_calc_sheet %>% filter(pref_factor>0) %>% pull(yr) %>% summary()
+# completed_calc_sheet %>% pull(pref_factor) %>% summary()
+# completed_calc_sheet %>% filter(pref_factor>0) %>% View()
+# completed_calc_sheet %>% filter(pref_factor>0) %>% pull(yr) %>% summary()
 # not sure why some PF go to 2050
 
 
