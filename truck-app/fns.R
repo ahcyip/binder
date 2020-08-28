@@ -89,21 +89,33 @@ payback <- function(inc_cost, monthly_savings, monthly_disc_rate, max_pd = 1000,
 
   if (raw == FALSE) {
     pb <- if_else(
-      # if monthly savings are 0 or negative, or if monthly savings are not enough to overcome incremental cost,
+      # if monthly savings are 0 or negative, (eqn => 0)
+      # or if monthly savings are not enough to overcome incremental cost, (eqn => NaN)
       #   then return max_pd
-      monthly_savings <= rep(0, length(monthly_savings)) | (inc_cost * monthly_disc_rate)/monthly_savings >= 1, max_pd,
+      monthly_savings <= rep(0, length(monthly_savings)) | (inc_cost * monthly_disc_rate)/monthly_savings >= 1,
+      # any(monthly_savings) ?
+      max_pd,
       # else, calculate discounted payback period via equation (works for equal cash flows)
       # rounded up to nearest whole number, and with max of max_pd
       # https://financeformulas.net/Discounted-Payback-Period.html
       pmin(
         ceiling(log(1/(1-(inc_cost * monthly_disc_rate)/monthly_savings))/log(1+monthly_disc_rate)),
         max_pd))
-  } else if (raw == TRUE) {
+  } else if (raw == TRUE) { # no rounding, no max_periods
     pb <- log(1/(1-(inc_cost * monthly_disc_rate)/monthly_savings))/log(1+monthly_disc_rate)
+
+    # may need conditions code to handle these cases
+    #payback(0,0,0.07/12,raw=TRUE) #NaN
+    #payback(0,-1,0.07/12,raw=TRUE) #0 - technically correct - no time needed to pay back - but also, negative fuel savings, so should never be adopted
+    #payback(-1,0,0.07/12,raw=TRUE) #-Inf
+
   }
 
   return(pb)
 }
+
+
+
 
 # VBA function for payback, subtraction method
 # Function Payback(IncCost As Double, CashFlow As Double, IntRate As Double, Optional MaxPd As Integer = 1000) As Integer
@@ -295,7 +307,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
            indifference_calc = if_else(inc_cost <= incr_cost & monthly_savings >= -fuel_mo,
                                        # incr_cost is the indifference cost - incr cost from Tech Options table
                                        # fuel_mo is the indifference cost - fuel from Tech Options table
-                                       pref_factor *
+                                       pref_factor * # not /0.5 because intended effect is 50%
                                          curve_for_indiff_to_first_cost(inc_cost/incr_cost) *
                                          curve_for_indiff_to_fuel_cost_savings(monthly_savings/fuel_mo),
                                        0),
@@ -303,7 +315,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
 
 
            # Incremental Cost Factor (adjusts adoption rate at the end)
-           # if it pays back but costs 2x, cash flow / cash availability may be restricted
+           # if it pays back but costs 2+ x, cash flow / cash availability may be restricted
            # is this covered in adoption curve?
            # same payback but large incremental cost may dissuade
 
@@ -332,23 +344,36 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
 
 
     # final market share is calculated by
+    # =IF(SUM($AX42:$BB42)=0,0,MAX($AX42:$BB42)*(AI42*AX42/SUMPRODUCT($AI42:$AM42,$AX42:$BB42)))
     # max adj_indiv_tech_adp_rate (largest adjusted share of the non-baseline technologies)
     # multiplied by (split by)
     # (pref_factor * adj_indiv_tech_adp_rate) / sum(pref_factor * adj_indiv_tech_adp_rate)
-    # this basically puts all other vehicles in a nest. it also limits all non-baseline to largest non-baseline tech share prediction
+    # ## PF duplicated here. Alicia intended a double penalty? effect: it slows the adoption/
+    # >> TO DO: remove PF in this weighting function because it's a double penalty
+    # ## also, this basically puts all other vehicles in a nest and
+    # ## it also limits all non-baseline to largest non-baseline tech share prediction
+    # >> TO DO: find an alternative... worried about limited draws from alt share nest based on max
+    # >> i.e. adv_conv draws away from elec
     group_by(yr, cls, flt, cohort) %>%
     mutate(final_mkt_shr = case_when(tech_type == "base" ~ NA_real_,
                                      sum(adj_indiv_tech_adoption_rate) == 0 ~ 0,
                                      TRUE ~ max(adj_indiv_tech_adoption_rate) *
-                                       pref_factor * adj_indiv_tech_adoption_rate / sum(pref_factor * adj_indiv_tech_adoption_rate, na.rm = T)),
-           final_mkt_shr = if_else(tech_type == "base", 1-sum(final_mkt_shr, na.rm = T), final_mkt_shr)) %>%
-    # =IF(SUM($AX42:$BB42)=0,0,MAX($AX42:$BB42)*(AI42*AX42/SUMPRODUCT($AI42:$AM42,$AX42:$BB42)))
-    #
-    # >>> TO DO: remove PF in this weighting function because it's a double penalty
-    #
+                                       pref_factor * adj_indiv_tech_adoption_rate /
+                                       sum(pref_factor * adj_indiv_tech_adoption_rate, na.rm = T)),
+           # with PF removed:
+           final_mkt_shr_v7 =  case_when(tech_type == "base" ~ NA_real_,
+                                         sum(adj_indiv_tech_adoption_rate) == 0 ~ 0,
+                                     TRUE ~ max(adj_indiv_tech_adoption_rate) *
+                                       adj_indiv_tech_adoption_rate /
+                                       sum(adj_indiv_tech_adoption_rate, na.rm = T)),
+
+           final_mkt_shr = if_else(tech_type == "base", 1-sum(final_mkt_shr, na.rm = T), final_mkt_shr),
+           final_mkt_shr_v7 = if_else(tech_type == "base", 1-sum(final_mkt_shr_v7, na.rm = T), final_mkt_shr_v7)) %>%
     ungroup() %>%
     mutate(tech_shr_of_vmt = VMTShr * final_mkt_shr,
-           tech_shr_of_trk = TruckShr * final_mkt_shr)
+           tech_shr_of_trk = TruckShr * final_mkt_shr,
+           tech_shr_of_vmt_v7 = VMTShr * final_mkt_shr_v7,
+           tech_shr_of_trk_v7 = TruckShr * final_mkt_shr_v7)
 
   return(calc_sheet_completed)
 }
@@ -358,25 +383,34 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
 calc_results_by_flt_and_tech <- function(calc_sheet_completed) {
   calc_sheet_completed %>%
     group_by(yr, cls, flt, tech) %>%
-    summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt), tech_shr_of_trk = sum(tech_shr_of_trk))
-}
-calc_results_by_tech <- function(calculated_results_by_flt_and_tech) {
-  calculated_results_by_flt_and_tech %>%
-    group_by(yr, cls, tech) %>%
-    summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt), tech_shr_of_trk = sum(tech_shr_of_trk))
+    summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt), tech_shr_of_trk = sum(tech_shr_of_trk),
+              tech_shr_of_vmt_v7 = sum(tech_shr_of_vmt_v7), tech_shr_of_trk_v7 = sum(tech_shr_of_trk_v7))
 }
 
-plot_mktpen_vmt <- function(shares_by_tech, filename) {
+calc_results_by_tech <- function(calc_sheet_completed) {
+  calc_sheet_completed %>%
+    group_by(yr, cls, tech) %>%
+    summarise(tech_shr_of_vmt = sum(tech_shr_of_vmt), tech_shr_of_trk = sum(tech_shr_of_trk),
+              tech_shr_of_vmt_v7 = sum(tech_shr_of_vmt_v7), tech_shr_of_trk_v7 = sum(tech_shr_of_trk_v7))
+}
+
+plot_mktpen_of_techs <- function(shares_by_tech, filename, var_to_plot) {
+  var <- sym(var_to_plot)
   gg1 <- shares_by_tech %>%
+    filter(tech != "na") %>%
     ggplot() +
-    geom_area(aes(x = yr, y = tech_shr_of_vmt, fill = fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+    geom_area(aes(x = yr,
+                  y = !!var,
+                  fill = fct_reorder2(tech, yr, tech_shr_of_vmt))) +
+                    # fct_relevel(tech, c("adv_conv", "hev", "bev", "fcev", "conventional_diesel_ice")) %>% fct_rev())) +
     # Options for legend/colour order:
-    ## tech %>% fct_relevel(tech, c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) %>% # this was the order in the TRUCK excel model.
+    ## fct_relevel(tech, c("adv_conv", "isg", "hev", "phev", "fchev", "conventional_diesel_ice")) %>% fct_rev()) # this was the order in the TRUCK78_20200221 excel model.
     ## fct_reorder2(tech, yr, tech_shr_of_vmt)) %>% # this will order it by size
-    facet_wrap(vars(cls)) +
+    facet_wrap(vars(fct_relevel(cls, c("78Sleep", "78Day", "78SU")))) +
     scale_x_continuous(limits = c(2016,2050)) +
     scale_fill_manual(values = c("#0079C2", "#00A4E4", "#F7A11A", "#FFC423", "#5D9732",
                                  "#8CC63F", "#933C06", "#D9531E", "#5E6A71", "#D1D5D8")) +
+    #scale_fill_manual(values = c("red","green","purple","blue","light blue","light grey") %>% rev()) +
     theme_minimal() +
     theme(legend.position = "right",
           axis.text.x.bottom = element_text(angle = 90)) +

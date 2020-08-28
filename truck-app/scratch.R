@@ -170,39 +170,37 @@ adoption_tbl <- AdoptionDecision$AdoptDec %>%
 #___________________________________________________________________
 # Run ####
 
-shares_by_tech <- build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
-  calc_results_by_flt_and_tech() %>%
-  calc_results_by_tech()
+completed_calc_sheet <- build_calc_sheet() %>% calc_pb_and_mktshrs()
+shares_by_tech <- completed_calc_sheet %>% calc_results_by_tech()
 
 shares_by_tech %>%
   write_csv("csv_output/shares_by_tech.csv")
-
 
 #___________________________________________________________________
 # tests ####
 
 # payback
-payback_result <- build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
+payback_results <- completed_calc_sheet %>%
   pivot_wider(names_from = "tech", values_from = "payback") %>%
-  filter(yr > 2020 & flt == "NCent" & cohort == ">200") # tech_type != "base" &
+  filter(yr > 2020 & flt == "NCent" & cohort == ">200" & cls == "78Sleep" & tech_type != "base")
+# TRUCK78_20200221 results successfully replicated.
+# Payback results were different from those in Copy of truck 20200221 (last run in 20200426)
 
-payback_result %>%
+payback_results %>%
   write_csv("csv_output/payback.csv")
-# replicates 2020-02-21 results.
-# not sure why results are different in Copy of truck 0221 (0426 results)
 
+payback_results %>%
+  View("payback")
 
 # final market share check
-build_calc_sheet() %>%
-  calc_pb_and_mktshrs() %>%
+completed_calc_sheet %>%
   pivot_wider(names_from = "tech", values_from = "final_mkt_shr") %>%
-  filter(yr > 2020 & flt == "NCent" & cohort == ">200") %>% # tech_type != "base" &
-  View()
+  filter(yr > 2020 & flt == "NCent" & cohort == ">200" & cls == "78Sleep") %>% # tech_type != "base" &
+  View("mktshr")
 
 
-# shares_by_flt %>%
+# completed_calc_sheet %>%
+#   calc_results_by_flt_and_tech() %>%
 #   filter(yr > 2020 & tech == "adv_conv") %>% # tech_type != "base" &
 #   View()
 #
@@ -214,6 +212,31 @@ build_calc_sheet() %>%
 #___________________________________________________________________
 # Mkt Pen Veh-Mi graphs ####
 
-plot_mktpen_vmt(shares_by_tech, "20200221_fchev_test3cls.png")
+(plot_20200827 <- plot_mktpen_of_techs(shares_by_tech, "20200827.png", "tech_shr_of_vmt"))
+
+
+# testing v7
+#plot_20200827_v7 <- plot_mktpen_of_techs(shares_by_tech, "20200827_v7.png", "tech_shr_of_vmt_v7")
+# library(patchwork)
+# plot_20200827 / plot_20200827_v7
+
+
 
 #___________________________________________________________________
+
+# diagnose difference between v6 & v7 (pf^2 removed)
+# shares_by_tech %>%
+#   mutate(tech_shr_of_vmt_diff = tech_shr_of_vmt_v7 - tech_shr_of_vmt) %>%
+#   pull(tech_shr_of_vmt_diff) %>%
+#   summary()
+# no diff in tech_shr_of_vmt!
+
+# completed_calc_sheet %>% pull(pref_factor) %>% summary()
+# completed_calc_sheet %>% filter(pref_factor>0) %>% View()
+# completed_calc_sheet %>% filter(pref_factor>0) %>% pull(yr) %>% summary()
+# not sure why some PF go to 2050
+
+
+# to do for alicia:
+# cls 4-6 read in
+# nesting diesel and hev
