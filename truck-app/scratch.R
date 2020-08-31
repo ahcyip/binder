@@ -19,7 +19,7 @@ input <- list()
 
 input$file1$datapath <- #here::here("TRUCK78_20200710.xlsm")
   #here::here("truck-app", "workingCopy of TRUCK78_20200221.xlsm")
-  here::here("truck-app", "TRUCK78_20200827_ab.xlsm")
+  here::here("truck-app", "TRUCK78_20200827_ab_kW.xlsm")
   #here::here("truck-app", "TRUCK78_20200710_original.xlsm")
 
 names <- get_names(input$file1)
