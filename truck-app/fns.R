@@ -48,8 +48,8 @@ convert_input_to_long <- function(input_table, tech_opt_desc, clsname, tech_cols
     tech_col_names <- tech_opt_desc %>% pull() %>% magrittr::extract(seq(2, nrow(tech_opt_desc)))
 
   output1 <- input_table %>%
-    bind_cols(Years,
-              cls = rep(clsname, nrow(Years))) %>% # set class here
+    bind_cols(Years1,
+              cls = rep(clsname, nrow(Years1))) %>% # set class here
     set_colnames(c(tech_col_names, "yr", "cls")) %>%
     clean_names()
 
@@ -194,7 +194,7 @@ curve_for_preference_factor_phase_in <- function(t, k1 = 4, k2 = 1) {
 
 curve_for_adj_incr_cost <- function(incr_cost_div_by_base_cost, k1 = 2, k2 = 0.6) {
   1-pweibull(incr_cost_div_by_base_cost, shape = k1, scale = k2)
-}
+} # replaces S_curves$ICostFactLU
 
 
 
@@ -229,13 +229,13 @@ build_calc_sheet <- function() {
     left_join(CD_range, by = c("cls", "yr", "tech")) %>%
     mutate(flt = "Cent/NCent") %>%
     separate_rows(flt) %>%
-    mutate(cohort = paste0(MarketData$Cohorts %>% pull(), collapse = "/")) %>%
+    mutate(cohort = paste0(MarketData1$Cohorts %>% pull(), collapse = "/")) %>%
     separate_rows(cohort, sep = "/") %>%
     left_join(mktdata_tbl, by = c("cls", "flt", "cohort" = "Cohorts")) %>%
     left_join(fuelprice_tbl, by = c("yr", "flt", "fuel_1" = "fuel")) %>%
     left_join(fuelprice_tbl, by = c("yr", "flt", "fuel_2" = "fuel"), suffix = c("_f1", "_f2")) %>%
     left_join(fuelavail_tbl, by = c("yr", "flt", "fuel_1" = "fuel")) %>%
-    left_join(RunModel$opdays, by = "cls")
+    left_join(RunModel1$opdays, by = "cls")
 }
 
 
@@ -257,7 +257,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
            payback = case_when(range_limited == T & CD_range < VMTperday ~ 86,
                                tech_type == "base" ~ NA_real_,
                                T ~ payback(inc_cost, monthly_savings,
-                                           RunModel$disc_rate %>% as.numeric() %>% divide_by(12),
+                                           RunModel1$disc_rate %>% as.numeric() %>% divide_by(12),
                                            # discount rate should be re-calculated properly instead of simple divide by 12
                                            max_pd = 86)),
 
@@ -321,7 +321,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
 
            inc_cost_adj = if_else(inc_cost < 0, 1, curve_for_adj_incr_cost(inc_cost/base_cost)),
 
-           adoption_curve = RunModel$adoption_curve %>% pull()) %>%
+           adoption_curve = RunModel1$adoption_curve %>% pull()) %>%
 
     left_join(adoption_tbl, by = c("payback" = "months", "adoption_curve" = "adoption_curve")) %>%
 

@@ -15,10 +15,13 @@ input <- list()
 input$file1$datapath <- #here::here("TRUCK78_20200710.xlsm")
   #here::here("truck-app", "workingCopy of TRUCK78_20200221.xlsm")
   #here::here("truck-app", "TRUCK78_20200221.xlsm")
-  here::here("truck-app", "TRUCK78_20200827.xlsm")
+  here::here("truck-app", "TRUCK78_20200831.xlsm")
+input$file2$datapath <- here::here("truck-app", "TRUCK46_20200831.xlsm")
 
-names <- get_names(input$file1)
-#View(names)
+names1 <- get_names(input$file1)
+names2 <- get_names(input$file2)
+View(names1)
+View(names2)
 
 #reading an individual name
 #read_excel_range("TECH_OPT_PARAMS_Cls1", FALSE, names, input$file1)
@@ -27,35 +30,35 @@ names <- get_names(input$file1)
 ## missing:
 ## classes other than 7&8 sleeper
 ## actual selected market adoption curve in RunModel
-## opdays now set here. could be in RunModel
+## opdays now set here. could be in RunModel tab
 ## disc_rate should be set here but is currently being read in.
 ##
-RunModel <- read_all_names_in_tab("'Run Model'", names, input$file1)
-RunModel$adoption_curve <- tibble(adoption_curve = "Moderate")
+RunModel1 <- read_all_names_in_tab("'Run Model'", names1, input$file1)
+RunModel1$adoption_curve <- tibble(adoption_curve = "Moderate")
 # this needs to be replaced with either actual selection in runmodel OR be set in the app and removed from the worksheet as an option.
-RunModel$opdays <- tibble(cls = c("78Sleep","78Day","78SU"), OPDAYS = c(250,250,250))
+RunModel1$opdays <- tibble(cls = c("78Sleep","78Day","78SU"), OPDAYS = c(250,250,250)) # this is manually entered right now.
 
 
-Inputs78Sleep <- read_all_names_in_tab("'Inputs 7&8 Sleep'", names, input$file1)
-Inputs78Day <- read_all_names_in_tab("'Inputs 7&8 Day'", names, input$file1)
-Inputs78SU <- read_all_names_in_tab("'Inputs 7&8 SU'", names, input$file1)
+Inputs78Sleep <- read_all_names_in_tab("'Inputs 7&8 Sleep'", names1, input$file1)
+Inputs78Day <- read_all_names_in_tab("'Inputs 7&8 Day'", names1, input$file1)
+Inputs78SU <- read_all_names_in_tab("'Inputs 7&8 SU'", names1, input$file1)
 # Ignoring / Don't need the following Excel named ranges:
 # (TECHOPTS_Cls1 and TECH_OPT_ROWS_Cls1 ("base a b c d e")) tech_opt_fuel_x ...
 # and TechClsxx, FuelxClsx
 # # TECH_OPT_DESC_Cls1 (alrdy included in params) (somewhat useful - used in convert input to long)
 
-FuelPrices <- read_all_names_in_tab("'Fuel Prices'", names, input$file1)
+FuelPrices1 <- read_all_names_in_tab("'Fuel Prices'", names1, input$file1)
 
 # grey tab fixed data
-MarketData <- read_all_names_in_tab("'Market Data'", names, input$file1)
-AdoptionDecision <- read_all_names_in_tab("'Adoption Decision'", names, input$file1)
-FuelAvail <- read_all_names_in_tab("FuelAvail", names, input$file1)
-S_curves <- read_all_names_in_tab("'S-curves'", names, input$file1)
+MarketData1 <- read_all_names_in_tab("'Market Data'", names1, input$file1)
+AdoptionDecision1 <- read_all_names_in_tab("'Adoption Decision'", names1, input$file1)
+FuelAvail1 <- read_all_names_in_tab("FuelAvail", names1, input$file1)
+S_curves1 <- read_all_names_in_tab("'S-curves'", names1, input$file1) # currently not used. s-curves (indifference algorithm, incremental cost, preference factor) are in written in R in fns.R
 
 #___________________________________________________________________
 # Load inputs ####
 
-Years <- Inputs78Sleep$Years # this only exists in Cls 1 sheet - technically should be in runmodel and ensured consistent between all classes.
+Years1 <- Inputs78Sleep$Years # this only exists in Cls 1 sheet - technically should be in runmodel and ensured consistent between all classes.
 
 clsnames_in_78 <- list("78Sleep", "78Day", "78SU")
 
@@ -115,23 +118,23 @@ CD_range <- list(input_tables = list(Inputs78Sleep$CDRANGE_CLS1,
 #___________________________________________________________________
 # general inputs ####
 
-mktdata_tbl <- MarketData %>%
+mktdata_tbl <- MarketData1 %>%
   bind_cols() %>%
-  set_colnames(names(MarketData)) %>%
+  set_colnames(names(MarketData1)) %>%
   pivot_longer(-Cohorts, names_to = c("cls", "flt", ".value"), names_pattern = "(Cls.)(.*Cent)(.*)") %>%
   select(-DailyRng) %>% # DailyRng is VMT/opdays (i.e. it depends on variable parameters)
   mutate(cls = case_when(cls == "Cls1" ~ "78Sleep",
                          cls == "Cls2" ~ "78Day",
                          cls == "Cls3" ~ "78SU"))
 
-fuelprice_tbl <- FuelPrices$FuelPriceCent %>% set_colnames(paste(FuelPrices$FuelPriceCols, "Cent", sep = "_")) %>%
-  bind_cols(FuelPrices$FuelPriceNCent %>% set_colnames(paste(FuelPrices$FuelPriceCols, "NCent", sep = "_"))) %>%
+fuelprice_tbl <- FuelPrices1$FuelPriceCent %>% set_colnames(paste(FuelPrices1$FuelPriceCols, "Cent", sep = "_")) %>%
+  bind_cols(FuelPrices1$FuelPriceNCent %>% set_colnames(paste(FuelPrices1$FuelPriceCols, "NCent", sep = "_"))) %>%
   select(-Year_NCent, yr = Year_Cent) %>%
   pivot_longer(-yr, names_to = c("fuel", "flt"), names_pattern = "(.*)_(.*)", values_to = "price_dge")
 
-fuelavail_tbl <- FuelAvail$fuel_avail %>%
-  set_colnames(FuelPrices$FuelPriceCols[2:length(FuelPrices$FuelPriceCols)]) %>%
-  add_column(yr = Years %>% pull()) %>%
+fuelavail_tbl <- FuelAvail1$fuel_avail %>%
+  set_colnames(FuelPrices1$FuelPriceCols[2:length(FuelPrices1$FuelPriceCols)]) %>%
+  add_column(yr = Years1 %>% pull()) %>%
   pivot_longer(-yr, names_to = "fuel", values_to = "NCent") %>%
   mutate(Cent = 1) %>%
   pivot_longer(-(yr:fuel), names_to = "flt", values_to = "fuel_avail_pref_factor_multiplier")
@@ -156,8 +159,8 @@ fuelavail_tbl <- FuelAvail$fuel_avail %>%
 #___________________________________________________________________
 # adoption inputs ####
 # to be replaced by weibull model fitted to survey data
-adoption_tbl <- AdoptionDecision$AdoptDec %>%
-  set_colnames(AdoptionDecision$AdoptCols) %>%
+adoption_tbl <- AdoptionDecision1$AdoptDec %>%
+  set_colnames(AdoptionDecision1$AdoptCols) %>%
   pivot_longer(-months, names_to = "adoption_curve", values_to = "cumulative_proportion_willing_to_adopt")
 
 
@@ -235,3 +238,18 @@ completed_calc_sheet %>%
 # cls 4-6 read in
 # nesting diesel and hev
 
+
+
+#___________________________________________________________________
+# hdstock ####
+
+
+# sheet-specific named ranges
+# vehprices, mkt pen - mi,
+#
+# save to same input file
+# stamp it with date
+#
+# add named ranges?? if new techs
+#
+# directly write to hdstock

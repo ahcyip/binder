@@ -307,7 +307,7 @@ stops_processed %>% filter(is.na(lon)) %>% View() # nrow()
 # most don't have location links in the pdf either.
 # could use google geocode to figure them out.
 
-# register_google
+register_google(Sys.getenv("google_cloud_apikey"))
 
 stops_with_missing_latlon <- stops_processed %>%
   filter(is.na(lon)) %>%
