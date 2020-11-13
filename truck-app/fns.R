@@ -289,10 +289,8 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
 
            #20200221
            #=IF(AND(C24<=AD$21,$N24-O24>=-AD$22),AI24*VLOOKUP(C24/AD$21,FirstCostInd,2,TRUE)*VLOOKUP(($N24-O24)/AD$22,FuelCostInd,2,1),0)
-
            #20200710
            #=IF(AND(C24<=AD$21,$N24-O24>=-AD$22),AI24*VLOOKUP(C24/AD$21,FirstCostInd,2,TRUE)*VLOOKUP(($N24-O24)/AD$22,FuelCostInd,2,1),0)
-
            # proposed change: abs($N24-O24)
 
            # based on 20200221 equation, looks like the idea was:

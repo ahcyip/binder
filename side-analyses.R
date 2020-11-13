@@ -9,14 +9,14 @@ source(here::here("truck-app", "fns.R"))
 # sweep ####
 sweep <- expand_grid(inc_cost = c(100, seq(-2000,30000,500)),
                      monthly_savings = c(10, seq(-500,3000,50)),
-                     monthly_disc_rate = c(0.07/12), #, 0.00000001, 0.3/12))
-                     yr_entry = c(1:20, 99),
-                     adoption_curve = "Moderate")
+                     disc_rate = c(0.07, 0.03, 0.14), #, 0.00000001, 0.3/12))
+                     yr_entry = 99, #c(1:20, 99),
+                     adoption_curve = c("Moderate", "Aggressive", "Conservative"))
 #sweep
 
 truck_map <- sweep %>%
-  mutate(payback_raw = sweep %>% pmap(~payback(..1, ..2, ..3, raw = TRUE)) %>% unlist(),
-         payback_truck = sweep %>% pmap(~payback(..1, ..2, ..3, raw = FALSE, max_pd = 85)) %>% unlist(),
+  mutate(payback_raw = sweep %>% pmap(~payback(..1, ..2, ..3/12, raw = TRUE)) %>% unlist(),
+         payback_truck = sweep %>% pmap(~payback(..1, ..2, ..3/12, raw = FALSE, max_pd = 85)) %>% unlist(),
          pf = 0.5*(yr_entry %>% map(curve_for_preference_factor_phase_in) %>% unlist()), #assumes intro 0, final 0.5, FA = 1
          indiff_inccost = sweep %>% pmap(~curve_for_indiff_to_first_cost(..1/5000)) %>% unlist(),
          indiff_fuelsavings = sweep %>% pmap(~curve_for_indiff_to_fuel_cost_savings(..2/100)) %>% unlist(),
@@ -28,7 +28,8 @@ truck_map <- sweep %>%
   mutate(adoption_prob = if_else(inc_cost < 5000 & monthly_savings > -100 & indiff > pf/0.5*cumulative_proportion_willing_to_adopt, indiff, pf/0.5*cumulative_proportion_willing_to_adopt),
          adoption_prob_adj = adoption_prob * incr_adj,
          adoption_prob_diff = adoption_prob - cumulative_proportion_willing_to_adopt,
-         adoption_prob_adj_diff = adoption_prob_adj - cumulative_proportion_willing_to_adopt)
+         adoption_prob_adj_diff = adoption_prob_adj - cumulative_proportion_willing_to_adopt,
+         adoption_curve = adoption_curve %>% fct_relevel(c("Aggressive", "Moderate", "Conservative")))
 
 # View(truck_map)
 # summary(truck_map)
@@ -39,7 +40,7 @@ truck_map <- sweep %>%
 
 # high-level TRUCK adoption algorithm, illustrated ####
 (high_level_map <- truck_map %>%
-  filter(monthly_disc_rate == 0.07/12 & payback_raw < 200 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101 & yr_entry == 99) %>%
+  filter(disc_rate == 0.07 & adoption_curve == "Moderate" & payback_raw < 200 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101 & yr_entry == 99) %>%
   ggplot() +
   #facet_wrap(facets = vars(monthly_disc_rate)) +
   stat_contour(aes(x = inc_cost, y = monthly_savings, z = payback_raw, col = ..level..),
@@ -69,7 +70,7 @@ truck_map <- sweep %>%
 
 # payback moderate ####
 (payback_map <- truck_map %>%
-  filter(monthly_disc_rate == 0.07/12 & yr_entry == 99 & inc_cost > 0 & monthly_savings >= 0) %>% # & payback_raw < 9999 & payback_raw > 0.01
+  filter(disc_rate == 0.07 & adoption_curve == "Moderate" & yr_entry == 99 & inc_cost > 0 & monthly_savings >= 0) %>% # & payback_raw < 9999 & payback_raw > 0.01
   ggplot() +
   #facet_wrap(facets = vars(monthly_disc_rate)) +
   geom_tile(aes(x = inc_cost, y = monthly_savings, col = cumulative_proportion_willing_to_adopt, fill = cumulative_proportion_willing_to_adopt), size = 8) +
@@ -94,9 +95,38 @@ truck_map <- sweep %>%
   geom_blank())
 ggsave("payback_map.png")
 
+#payback faceted by discount rate and adoption curve
+(payback_map_fct <- truck_map %>%
+    filter(yr_entry == 99 & inc_cost > 0 & monthly_savings > 0) %>% # & payback_raw < 9999 & payback_raw > 0.01
+    ggplot() +
+    facet_grid(cols = vars(disc_rate), rows = vars(adoption_curve), labeller = label_both) +
+    geom_tile(aes(x = inc_cost, y = monthly_savings, col = cumulative_proportion_willing_to_adopt, fill = cumulative_proportion_willing_to_adopt), size = 8) +
+    stat_contour(aes(x = inc_cost, y = monthly_savings, z = payback_raw),
+                 col = "white",
+                 breaks = c(3, 6, 12, 18, 24, 36, 48, 72)) +
+    geom_text_contour(aes(x = inc_cost, y = monthly_savings, z = payback_raw),
+                      col = "white",
+                      breaks = c(3, 6, 12, 18, 24, 36, 48, 72)) +
+    labs(x = "Incremental cost [$]",
+         y = "Monthly fuel savings [$/month]",
+         col = "Adoption\nprobability",
+         fill = "Adoption\nprobability",
+         title = "Adoption probability based on discounted payback period and 1997 ATA survey responses",
+         subtitle = "Contours and labels represent discounted payback time in months\nColumns show variations on discount rate, affecting both payback and adoption probability\nRows show variations on fitted adoption curve, affecting translation of payback to adoption probability") +
+    scale_x_continuous(breaks = seq(0,30000,3000), minor_breaks = seq(0, 30000, 1000)) +
+    scale_y_continuous(limits = c(0,1000)) +
+    scale_colour_viridis_c(limits = c(0,1), breaks = c(0,0.25,0.5,0.75,1), labels = c("0%","25%","50%","75%","100%")) +
+    scale_fill_viridis_c(limits = c(0,1), breaks = c(0,0.25,0.5,0.75,1), labels = c("0%","25%","50%","75%","100%")) +
+    theme_minimal() +
+    theme(axis.text.x.bottom = element_text(angle = 90)) +
+    geom_blank())
+ggsave("payback_map_fct.png", width = 8, height = 9)
+
+
+
 # indifference ####
 (indiff_map <- truck_map %>%
-  filter(monthly_disc_rate == 0.07/12 & inc_cost > 0 & yr_entry == 99) %>%
+  filter(disc_rate == 0.07 & adoption_curve == "Moderate" & inc_cost > 0 & yr_entry == 99) %>%
   #& payback_raw < 999 & payback_raw > 0.1 & & monthly_savings > -101) %>%
   ggplot() +
   #facet_wrap(facets = vars(monthly_disc_rate)) +
@@ -123,7 +153,7 @@ ggsave("indiff_map.png")
 
 # Adoption probability from payback OR indifference algorithm AND PF AND incremental cost adjustment ####
 (adoption_map <- truck_map %>%
-  filter(monthly_disc_rate == 0.07/12 & inc_cost > 0 & yr_entry == 99) %>% # payback_raw < 999 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101) %>%
+  filter(disc_rate == 0.07 & adoption_curve == "Moderate" & inc_cost > 0 & yr_entry == 99) %>% # payback_raw < 999 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101) %>%
   ggplot() +
   #facet_wrap(facets = vars(monthly_disc_rate)) +
   geom_tile(aes(x = inc_cost, y = monthly_savings, col = adoption_prob_adj, fill = adoption_prob_adj), size = 8) +
@@ -143,7 +173,7 @@ ggsave("indiff_map.png")
 
 
 (adoption_map_facet_yrentry <- truck_map %>%
-    filter(monthly_disc_rate == 0.07/12 & inc_cost > 0 & yr_entry %in% c(2,5,8,11)) %>%
+    filter(disc_rate == 0.07 & adoption_curve == "Moderate" & inc_cost > 0 & yr_entry %in% c(2,5,8,11)) %>%
     # payback_raw < 999 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101) %>%
     ggplot() +
     facet_wrap(facets = vars(yr_entry), nrow = 1) +
@@ -181,7 +211,7 @@ sample_path <- completed_calc_sheet %>%
 
 # where is indifference algorithm, pf, and incremental cost adjustment making a difference?
 (difference_map <- truck_map %>%
-  filter(monthly_disc_rate == 0.07/12 & inc_cost > 0 & yr_entry %in% c(2,5,8,11)) %>% # payback_raw < 999 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101) %>%
+  filter(disc_rate == 0.07 & adoption_curve == "Moderate" & inc_cost > 0 & yr_entry %in% c(2,5,8,11)) %>% # payback_raw < 999 & payback_raw > 0.1 & inc_cost > 0 & monthly_savings > -101) %>%
   filter(adoption_prob_adj_diff != 0) %>%
   ggplot() +
   #facet_wrap(facets = vars(monthly_disc_rate)) +

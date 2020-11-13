@@ -9,8 +9,8 @@
 # load packages (must run every time) ####
 library(maps);
 library(rvest); library(ggmap); library(ggsn); library(ggrepel);
-library(janitor); library(snakecase); library("sf"); library(progress);
-library(magrittr); library(tidyverse);
+library(janitor); library(snakecase); library(sf); library(progress);
+library(magrittr); library(tidyverse); library(broom)
 
 #___________________________________________________________________
 # load truckstops from allstays ####
@@ -176,7 +176,6 @@ stop_info_df %>% saveRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
 #___________________________________________________________________
 # read/mutate allstays data (start here) ####
 stop_info_df <- readRDS(here::here("allstays-analysis", "stop_info_df.RDS"))
-#readRDS("C:/Users/ayip/Desktop/vtap/binder/allstays-analysis/stop_info_df.RDS")
 View(stop_info_df)
 
 #___________________________________________________________________
@@ -307,19 +306,18 @@ stops_processed %>% filter(is.na(lon)) %>% View() # nrow()
 # most don't have location links in the pdf either.
 # could use google geocode to figure them out.
 
-register_google(Sys.getenv("google_cloud_apikey"))
 
+register_google(Sys.getenv("google_cloud_apikey"))
 stops_with_missing_latlon <- stops_processed %>%
   filter(is.na(lon)) %>%
   mutate(address_full = paste(address,city,state,postalCode, sep = ", ")) %>%
   mutate_geocode(address_full, output = "latlona")
 
 stops_with_missing_latlon %>% View()
-
-stops_with_missing_latlon %>% saveRDS("stops_w_missing_latlon.RDS")
+stops_with_missing_latlon %>% saveRDS(here::here("allstays-analysis", "stops_w_missing_latlon.RDS"))
 
 # to do:
-# join these back in.
+# join these back in with lat/lon guesses
 # manual edit those addresses to find a better location?
 # find "10 parralel area truck parking space" and maybe erase certain words/phrases?
 
@@ -449,6 +447,7 @@ stops_processed %>%
   group_by(chain3) %>%
   summarize(avg = mean(diesel_lanes, na.rm = T))
 
+# build model
 lm_fit_for_diesel_lanes <- lm(diesel_lanes ~ -1 + log(pksp_total+10) + chain3 + offset(k),
                               data = stops_processed %>%
                                 filter(!is.na(diesel_lanes) & !is.na(pksp_total) &
@@ -459,10 +458,9 @@ plot(lm_fit_for_diesel_lanes)
 # save predictions of model in new data frame together with variable you want to plot against
 stops_processed <- stops_processed %>%
   mutate(lane_pred = predict(lm_fit_for_diesel_lanes, stops_processed))
-
 # se included
-library(broom)
 stops_with_preds <- lm_fit_for_diesel_lanes %>% augment(newdata = stops_processed)
+
 
 
 diesellanes_vs_pksp +
@@ -501,6 +499,8 @@ stops_processed %>%
   group_by(chain3, smallstop) %>%
   summarize(manual_diesel_lane_pred = mean(diesel_lanes, na.rm=T)))
 
+
+# produce final result
 stops_w_full_lanes <- stops_processed %>%
   left_join(manual_diesel_lane_pred, by = c("chain3", "smallstop")) %>%
   mutate(diesel_lanes_final = case_when(diesel_lanes_NA == FALSE ~ diesel_lanes,
@@ -510,7 +510,8 @@ stops_w_full_lanes <- stops_processed %>%
 
 stops_w_full_lanes %>% summary()
 
-
+write_csv(stop_info_df, here::here("allstays-analysis", "truckstops_raw_ay.csv"))
+write_csv(stops_w_full_lanes, here::here("allstays-analysis", "truckstops_processed_ay.csv"))
 
 #___________________________________________________________________
 # analyze truck stop numbers and diesel lanes ####
@@ -540,32 +541,27 @@ stops_w_full_lanes %>%
 # 27204 diesel lanes
 
 
-# diesel dispensing rate...
+# diesel dispensing rate
 # https://en.wikipedia.org/wiki/Fuel_dispenser
 # Light passenger vehicle pump flow rate ranges up to about 50 litres (13 US gallons) per minute[7] (the United States limits this to 10 US gallons (38 litres) per minute[8]);
 # https://www.govinfo.gov/app/details/FR-1996-06-26/96-16205
 # refueling facilities are exempt from the 10gpm requirement if used exclusively to refuel heavy-duty vehicles, boats or airplanes.
 #
 # ...  pumps serving trucks and other large vehicles have a higher flow rate, up to 130 litres (34 US gallons) per minute in the UK,[7] and airline refueling can reach 1,000 US gallons (3,800 litres) per minute.[9] Higher flow rates may overload the vapor recovery system in vehicles equipped with enhanced evaporative emissions controls[10] (required since 1996 in the US), causing excess vapor emissions, and may present a safety hazard.
-
 #  In the U.S. flow speed is limited to 10 gallons per minute for cars and 40 gallons per minute for trucks. This flow rate is based on the diameter of the vehicle's fuel filling pipe, which limits flow to these amounts.
-
 # google "heavy duty diesel fuel dispensing speed"
 # http://www.aboutrving.com/rv-topics/fueling-up-at-truck-pumps/
 # If you drive one of those big diesel-pusher motorhomes, your fuel tank has a large capacity when compared with a normal vehicle. You can likely carry 100+ gallons of fuel—again, lots more than a normal vehicle.
 # A big truck (a semi-tractor) may hold 300+ gallons of diesel fuel in what are called “saddle tanks” (150 gallons each, one on each side of the tractor). It would take them forever to fill at a normal fuel pump (for cars).
 # Once a driver pulls into the pump, they are going to be there about 10–15 minutes. They will fill the tanks, clean the windshield, may check the oil, and whatever minor checking is necessary.
 # Using the pump at the truck island is efficient. A fully functional truck pump is rated at 60 gallons per minute. That is six times faster than those at the typical gas station.
-
 # https://www.gilbarco.com/la/en/products/fuel-dispensers/encore/ultra-high-flow
 # * Assumes 30 psi inlet pressure. Flow rate for master and satellite used separately is about 32 gpm each. Actual results may vary.
-
 # 2 estimates: 30 & 60 gpm = 0.5-1 gps
 # 1 US gal diesel = 137381 Btu https://www.eia.gov/energyexplained/units-and-calculators/
 # 1 Btu = 1055.06 J; 3412 Btu = 1 kWh (3600000 J) https://www.eia.gov/energyexplained/units-and-calculators/british-thermal-units.php
 # so 1 US gal diesel = 144.945 MJ
 # so 0.5-1 gal/sec * 144.945 MJ/gal = 72-145 MW
-
 # about 7 min fueling, 7 min pulling up/inspecting/other -> 0.5
 # assumes 100% 24/7/365 available operation
 27204 * 100
@@ -860,7 +856,7 @@ head(pep2018)
 
 
 
-# to map lat lon to fips
+# to map lat lon to county fips
 # use geocode (google api)
 # or https://rdrr.io/cran/rSPARCS/man/FIPS.name.html
 # or

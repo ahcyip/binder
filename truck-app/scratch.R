@@ -15,28 +15,39 @@ input <- list()
 input$file1$datapath <- #here::here("TRUCK78_20200710.xlsm")
   #here::here("truck-app", "workingCopy of TRUCK78_20200221.xlsm")
   #here::here("truck-app", "TRUCK78_20200221.xlsm")
-  here::here("truck-app", "TRUCK78_20200831.xlsm")
-input$file2$datapath <- here::here("truck-app", "TRUCK46_20200831.xlsm")
+  #here::here("truck-app", "TRUCK78_20200831.xlsm")
+  here("truck-app", "TRUCK78_20201103.xlsm")
+input$file2$datapath <- here("truck-app", "TRUCK46_20201103.xlsm")
 
 names1 <- get_names(input$file1)
 names2 <- get_names(input$file2)
-View(names1)
-View(names2)
+# View(names1)
+# View(names2)
+#
+# names_comparison_btwn_78and46 <- names1 %>%
+#   select(-rId, -sheet, -comment, -hidden, -is_range) %>%
+#   full_join(names2 %>% select(-rId, -sheet, -comment, -hidden, -is_range),
+#             by = c("location", "name"),
+#             suffix = c(".78", ".46")) %>%
+#   select(location, name, everything())
+# names_comparison_btwn_78and46 %>% View()
 
-#reading an individual name
-#read_excel_range("TECH_OPT_PARAMS_Cls1", FALSE, names, input$file1)
-
-# read yellow tab inputs (whole tabs at a time)
+# read yellow tab inputs
+# disc_rate is read in, but might want to set this in app.
 ## missing:
-## classes other than 7&8 sleeper
-## actual selected market adoption curve in RunModel
-## opdays now set here. could be in RunModel tab
-## disc_rate should be set here but is currently being read in.
-##
+## actual selected market adoption curve in RunModel (currently assumed Moderate)
+## opdays now set here (currently assumed 250). Should be in RunModel tab instead of at top of each tab.
+## disc_rate should be set here/in app but is currently being read in.
 RunModel1 <- read_all_names_in_tab("'Run Model'", names1, input$file1)
 RunModel1$adoption_curve <- tibble(adoption_curve = "Moderate")
 # this needs to be replaced with either actual selection in runmodel OR be set in the app and removed from the worksheet as an option.
 RunModel1$opdays <- tibble(cls = c("78Sleep","78Day","78SU"), OPDAYS = c(250,250,250)) # this is manually entered right now.
+
+RunModel2 <- read_all_names_in_tab("'Run Model'", names2, input$file2)
+RunModel2$adoption_curve <- tibble(adoption_curve = "Moderate")
+# this needs to be replaced with either actual selection in runmodel OR be set in the app and removed from the worksheet as an option.
+RunModel2$opdays <- tibble(cls = c("46Diesel","46Gas"), OPDAYS = c(250,250)) # this is manually entered right now.
+
 
 
 Inputs78Sleep <- read_all_names_in_tab("'Inputs 7&8 Sleep'", names1, input$file1)
@@ -46,8 +57,13 @@ Inputs78SU <- read_all_names_in_tab("'Inputs 7&8 SU'", names1, input$file1)
 # (TECHOPTS_Cls1 and TECH_OPT_ROWS_Cls1 ("base a b c d e")) tech_opt_fuel_x ...
 # and TechClsxx, FuelxClsx
 # # TECH_OPT_DESC_Cls1 (alrdy included in params) (somewhat useful - used in convert input to long)
+Inputs46Gas <- read_all_names_in_tab("'Inputs 4-6 Gas'", names2, input$file2)
+Inputs46Diesel <- read_all_names_in_tab("'Inputs 4-6 Diesel'", names2, input$file2)
+
 
 FuelPrices1 <- read_all_names_in_tab("'Fuel Prices'", names1, input$file1)
+FuelPrices2 <- read_all_names_in_tab("'Fuel Prices'", names2, input$file2)
+
 
 # grey tab fixed data
 MarketData1 <- read_all_names_in_tab("'Market Data'", names1, input$file1)
@@ -55,71 +71,102 @@ AdoptionDecision1 <- read_all_names_in_tab("'Adoption Decision'", names1, input$
 FuelAvail1 <- read_all_names_in_tab("FuelAvail", names1, input$file1)
 S_curves1 <- read_all_names_in_tab("'S-curves'", names1, input$file1) # currently not used. s-curves (indifference algorithm, incremental cost, preference factor) are in written in R in fns.R
 
+MarketData2 <- read_all_names_in_tab("'Market Data'", names2, input$file2)
+AdoptionDecision2 <- read_all_names_in_tab("'Adoption Decision'", names2, input$file2)
+FuelAvail2 <- read_all_names_in_tab("FuelAvail", names2, input$file2)
+S_curves2 <- read_all_names_in_tab("'S-curves'", names2, input$file2)
+
+
 #___________________________________________________________________
 # Load inputs ####
 
-Years1 <- Inputs78Sleep$Years # this only exists in Cls 1 sheet - technically should be in runmodel and ensured consistent between all classes.
+Years <- Inputs78Sleep$Years # this only exists in Cls 1 sheet - technically should be in runmodel and ensured consistent between all classes.
+stopifnot(Years == Inputs78Gas$Years)
+# also, only used to fill in years for fuel availability ...
 
-clsnames_in_78 <- list("78Sleep", "78Day", "78SU")
+clsnames <- list("78Sleep", "78Day", "78SU", "46Gas", "46Diesel")
 
 tech_opts <- list(params = list(Inputs78Sleep$TECH_OPT_PARAMS_Cls1,
                                 Inputs78Day$TECH_OPT_PARAMS_Cls2,
-                                Inputs78SU$TECH_OPT_PARAMS_Cls3),
-                  clsnames = clsnames_in_78,
+                                Inputs78SU$TECH_OPT_PARAMS_Cls3,
+                                Inputs46Gas$TECH_OPT_PARAMS_Cls1,
+                                Inputs46Diesel$TECH_OPT_PARAMS_Cls2
+                                ),
+                  clsnames = clsnames,
                   cols = list(Inputs78Sleep$TECH_OPT_COLS_Cls1, # these should be all the same
                               Inputs78Day$TECH_OPT_COLS_Cls2,
-                              Inputs78SU$TECH_OPT_COLS_Cls3)) %>%
+                              Inputs78SU$TECH_OPT_COLS_Cls3,
+                              Inputs46Gas$TECH_OPT_COLS_Cls1,
+                              Inputs46Diesel$TECH_OPT_COLS_Cls2
+                              )) %>%
   pmap_dfr(~load_tech_options(..1, ..2, ..3))
 
 # to do: input/calc mileage dep costs: monthly budget, monthly savings as per blue calculation sheets
 # Alicia Birky:
 # Additional (non-fuel) costs that depend on accumulated miles, such as engine repower, hybrid battery replacement, etc.
 
-tech_opt_desc_list_of_3_in_78 <- list(Inputs78Sleep$TECH_OPT_DESC_Cls1,
-                                      Inputs78Day$TECH_OPT_DESC_Cls2,
-                                      Inputs78SU$TECH_OPT_DESC_Cls3)
+tech_opt_desc <- list(Inputs78Sleep$TECH_OPT_DESC_Cls1,
+                      Inputs78Day$TECH_OPT_DESC_Cls2,
+                      Inputs78SU$TECH_OPT_DESC_Cls3,
+                      Inputs46Gas$TECH_OPT_DESC_Cls1,
+                      Inputs46Diesel$TECH_OPT_DESC_Cls2
+                      )
 
 costs <- list(input_tables = list(Inputs78Sleep$COST_Cls1,
                                   Inputs78Day$COST_Cls2,
-                                  Inputs78SU$COST_Cls3),
-              tech_opt_desc = tech_opt_desc_list_of_3_in_78,
-              clsnames = clsnames_in_78) %>%
+                                  Inputs78SU$COST_Cls3,
+                                  Inputs46Gas$COST_Cls1,
+                                  Inputs46Diesel$COST_Cls2
+                                  ),
+              tech_opt_desc = tech_opt_desc,
+              clsnames = clsnames) %>%
   pmap_dfr(~convert_input_to_long(..1, ..2, ..3, tech_cols = "base_and_alts", values_to = "costs"))
 
 subsidy <- list(input_tables = list(Inputs78Sleep$SUBSIDY_Cls1,
                                     Inputs78Day$SUBSIDY_Cls2,
-                                    Inputs78SU$SUBSIDY_Cls3),
-                tech_opt_desc = tech_opt_desc_list_of_3_in_78,
-                clsnames = clsnames_in_78) %>%
+                                    Inputs78SU$SUBSIDY_Cls3,
+                                    Inputs46Gas$SUBSIDY_Cls1,
+                                    Inputs46Diesel$SUBSIDY_Cls2
+                                    ),
+                tech_opt_desc = tech_opt_desc,
+                clsnames = clsnames) %>%
   pmap_dfr(~convert_input_to_long(..1, ..2, ..3, tech_cols = "alts_only", values_to = "subsidy"))
 # should allow for subsidy / tax (negative subsidy) on base fuel vehicle - would resolve inconsistency of alts only
 
 fuel1_economy <- list(input_tables = list(Inputs78Sleep$FUEL1MPG_Cls1,
                                           Inputs78Day$FUEL1MPG_Cls2,
-                                          Inputs78SU$FUEL1MPG_Cls3),
-                      tech_opt_desc = tech_opt_desc_list_of_3_in_78,
-                      clsnames = clsnames_in_78) %>%
+                                          Inputs78SU$FUEL1MPG_Cls3,
+                                          Inputs46Gas$FUEL1MPG_Cls1,
+                                          Inputs46Diesel$FUEL1MPG_Cls2
+                                          ),
+                      tech_opt_desc = tech_opt_desc,
+                      clsnames = clsnames) %>%
   pmap_dfr(~convert_input_to_long(..1, ..2, ..3, tech_cols = "base_and_alts", values_to = "f1_mpgde"))
 
 fuel2_economy <- list(input_tables = list(Inputs78Sleep$FUEL2MPG_Cls1,
                                           Inputs78Day$FUEL2MPG_Cls2,
-                                          Inputs78SU$FUEL2MPG_Cls3),
-                      tech_opt_desc = tech_opt_desc_list_of_3_in_78,
-                      clsnames = clsnames_in_78) %>%
+                                          Inputs78SU$FUEL2MPG_Cls3,
+                                          Inputs46Gas$FUEL2MPG_Cls1,
+                                          Inputs46Diesel$FUEL2MPG_Cls2
+                                          ),
+                      tech_opt_desc = tech_opt_desc,
+                      clsnames = clsnames) %>%
   pmap_dfr(~convert_input_to_long(..1, ..2, ..3, tech_cols = "base_and_alts", values_to = "f2_mpgde"))
 
 CD_range <- list(input_tables = list(Inputs78Sleep$CDRANGE_CLS1,
                                      Inputs78Day$CDRANGE_CLS2,
-                                     Inputs78SU$CDRANGE_CLS3),
-                 tech_opt_desc = tech_opt_desc_list_of_3_in_78,
-                 clsnames = clsnames_in_78) %>%
+                                     Inputs78SU$CDRANGE_CLS3,
+                                     Inputs46Gas$CDRANGE_CLS1,
+                                     Inputs46Diesel$CDRANGE_CLS2),
+                 tech_opt_desc = tech_opt_desc,
+                 clsnames = clsnames) %>%
   pmap_dfr(~convert_input_to_long(..1, ..2, ..3, tech_cols = "base_and_alts", values_to = "CD_range"))
 
 #___________________________________________________________________
 # general inputs ####
 
-mktdata_tbl <- MarketData1 %>%
-  bind_cols() %>%
+mktdata_tbl <- MarketData1 %>% bind_cols() %>%
+  bind_rows(MarketData2 %>% bind_cols()) %>%
   set_colnames(names(MarketData1)) %>%
   pivot_longer(-Cohorts, names_to = c("cls", "flt", ".value"), names_pattern = "(Cls.)(.*Cent)(.*)") %>%
   select(-DailyRng) %>% # DailyRng is VMT/opdays (i.e. it depends on variable parameters)
@@ -134,7 +181,7 @@ fuelprice_tbl <- FuelPrices1$FuelPriceCent %>% set_colnames(paste(FuelPrices1$Fu
 
 fuelavail_tbl <- FuelAvail1$fuel_avail %>%
   set_colnames(FuelPrices1$FuelPriceCols[2:length(FuelPrices1$FuelPriceCols)]) %>%
-  add_column(yr = Years1 %>% pull()) %>%
+  add_column(yr = Years %>% pull()) %>%
   pivot_longer(-yr, names_to = "fuel", values_to = "NCent") %>%
   mutate(Cent = 1) %>%
   pivot_longer(-(yr:fuel), names_to = "flt", values_to = "fuel_avail_pref_factor_multiplier")
@@ -237,6 +284,12 @@ completed_calc_sheet %>%
 # to do for alicia:
 # cls 4-6 read in
 # nesting diesel and hev
+
+#___________________________________________________________________
+# misc analyses ####
+
+# ANL request: class, year, powertrain, mileage bin, share_sales, share_mileage
+
 
 
 
