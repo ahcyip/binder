@@ -62,10 +62,11 @@ convert_input_to_long <- function(input_table, tech_opt_desc, clsname, tech_cols
                    names_to = c("tech",".value"),
                    names_pattern = "(.*)__(.*)") %>% # base cost + named range: IncCosts
       group_by(yr, cls) %>%
-      # mutate(tech_type = if_else(tech == "conventional_diesel_ice", "base", "alt")) %>%
-      mutate(tech_type = if_else(tot_cost == min(tot_cost), "base", "alt"), # identify least-cost tech alt as "base"
-             base_cost = min(tot_cost)) %>%
+      mutate(tech_type = if_else(tech == "conventional_diesel_ice", "base", "alt"),
+              base_cost = min(tot_cost)) %>%
+      # mutate(tech_type = if_else(tot_cost == min(tot_cost), "base", "alt"), # identify least-cost tech alt as "base"
       ## need extra code/rule to handle if multiple AFVs have the same lowest cost
+      ## # otherwise extra market share will occur!
       ungroup() %>%
       return()
   } else {
@@ -182,8 +183,10 @@ curve_for_indiff_to_fuel_cost_savings <- function(frac_of_indiff_fuel_cost, k1 =
 # - Weibull
 
 curve_for_preference_factor_phase_in <- function(t, k1 = 4, k2 = 1) {
-  1/(1+exp(-(t-k1)/k2))
+  return(1/(1+exp(-(t-k1)/k2)))
+  # zero out where this function is read when t<=0
 } # replaces S_curves$SCdata
+
 
 # Adjustment factor for incremental cost
 # Weibull: F(p) = 1-e^(-(p/k2)^k1)
@@ -232,10 +235,11 @@ build_calc_sheet <- function() {
     mutate(cohort = paste0(MarketData1$Cohorts %>% pull(), collapse = "/")) %>%
     separate_rows(cohort, sep = "/") %>%
     left_join(mktdata_tbl, by = c("cls", "flt", "cohort" = "Cohorts")) %>%
-    left_join(fuelprice_tbl, by = c("yr", "flt", "fuel_1" = "fuel")) %>%
-    left_join(fuelprice_tbl, by = c("yr", "flt", "fuel_2" = "fuel"), suffix = c("_f1", "_f2")) %>%
-    left_join(fuelavail_tbl, by = c("yr", "flt", "fuel_1" = "fuel")) %>%
-    left_join(RunModel1$opdays, by = "cls")
+    left_join(fuelprice_tbl, by = c("yr", "cls", "flt", "fuel_1" = "fuel")) %>%
+    left_join(fuelprice_tbl, by = c("yr", "cls", "flt", "fuel_2" = "fuel"), suffix = c("_f1", "_f2")) %>%
+    left_join(fuelavail_tbl, by = c("yr", "cls", "flt", "fuel_1" = "fuel")) %>%
+    left_join(RunModel_opdays, by = "cls") %>%
+    left_join(RunModel_adoption_curve, by = "cls")
 }
 
 
@@ -265,7 +269,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
            # Preference Factor
            # Alicia Birky:
            # The preference factor represents the fraction, in competition with the base, that consumers would purchase if purchase cost and fuel cost were the same as the base.  Set value =0.5 for no bias/preference.
-           pref_factor = if_else(yr < intro_yr, 0,
+           pref_factor = if_else(yr <= intro_yr, 0,
                                  intro +
                                    curve_for_preference_factor_phase_in(yr - intro_yr) *
                                    (final - intro) * fuel_avail_pref_factor_multiplier),
@@ -317,9 +321,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
            # is this covered in adoption curve?
            # same payback but large incremental cost may dissuade
 
-           inc_cost_adj = if_else(inc_cost < 0, 1, curve_for_adj_incr_cost(inc_cost/base_cost)),
-
-           adoption_curve = RunModel1$adoption_curve %>% pull()) %>%
+           inc_cost_adj = if_else(inc_cost < 0, 1, curve_for_adj_incr_cost(inc_cost/base_cost))) %>%
 
     left_join(adoption_tbl, by = c("payback" = "months", "adoption_curve" = "adoption_curve")) %>%
 
@@ -358,7 +360,7 @@ calc_pb_and_mktshrs <- function(calc_sheet) {
                                      TRUE ~ max(adj_indiv_tech_adoption_rate) *
                                        pref_factor * adj_indiv_tech_adoption_rate /
                                        sum(pref_factor * adj_indiv_tech_adoption_rate, na.rm = T)),
-           # with PF removed:
+           # with extra PF removed:
            final_mkt_shr_v7 =  case_when(tech_type == "base" ~ NA_real_,
                                          sum(adj_indiv_tech_adoption_rate) == 0 ~ 0,
                                      TRUE ~ max(adj_indiv_tech_adoption_rate) *
